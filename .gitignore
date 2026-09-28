@@ -1,0 +1,29 @@
+# Java / Maven build output
+target/
+*.class
+*.log
+
+# Keep the Maven wrapper jar (needed by ./mvnw)
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# Node / React (Step 4)
+node_modules/
+dist/
+build/
+
+# Secrets and local config (DB passwords, JWT secrets)
+.env
+.env.*
+application-local.properties
+
+# OS files
+.DS_Store
+Thumbs.db
