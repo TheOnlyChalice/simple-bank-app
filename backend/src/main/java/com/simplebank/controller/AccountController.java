@@ -1,0 +1,59 @@
+package com.simplebank.controller;
+
+import com.simplebank.dto.AccountResponse;
+import com.simplebank.dto.AmountRequest;
+import com.simplebank.dto.CreateAccountRequest;
+import com.simplebank.dto.TransactionResponse;
+import com.simplebank.service.AccountService;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.net.URI;
+import java.util.List;
+
+/**
+ * The endpoints from section 5.4. Controllers only deal with HTTP:
+ * read the request, call the service, return the result.
+ */
+@RestController
+@RequestMapping("/api/accounts")
+public class AccountController {
+
+    private final AccountService accountService;
+
+    public AccountController(AccountService accountService) {
+        this.accountService = accountService;
+    }
+
+    @PostMapping
+    public ResponseEntity<AccountResponse> createAccount(@Valid @RequestBody CreateAccountRequest request) {
+        AccountResponse account = accountService.createAccount(request.userId(), request.accountType());
+        return ResponseEntity.created(URI.create("/api/accounts/" + account.accountId())).body(account);
+    }
+
+    @GetMapping("/{id}")
+    public AccountResponse getAccount(@PathVariable Long id) {
+        return accountService.getAccount(id);
+    }
+
+    @PostMapping("/{id}/deposit")
+    public AccountResponse deposit(@PathVariable Long id, @Valid @RequestBody AmountRequest request) {
+        return accountService.deposit(id, request.amount());
+    }
+
+    @PostMapping("/{id}/withdraw")
+    public AccountResponse withdraw(@PathVariable Long id, @Valid @RequestBody AmountRequest request) {
+        return accountService.withdraw(id, request.amount());
+    }
+
+    @GetMapping("/{id}/transactions")
+    public List<TransactionResponse> getTransactions(@PathVariable Long id) {
+        return accountService.getTransactions(id);
+    }
+}
