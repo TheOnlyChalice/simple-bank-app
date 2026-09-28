@@ -1,0 +1,286 @@
+{
+  "info": {
+    "name": "Simple Bank API",
+    "description": "Start the backend first (./mvnw spring-boot:run). Run the whole collection with the Runner. 'Happy path' creates a user and account and saves their IDs. 'Business rules and errors' checks that every rule returns the right status code.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "userId", "value": "" },
+    { "key": "accountId", "value": "" },
+    { "key": "email", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Happy path",
+      "item": [
+        {
+          "name": "Create User",
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "// Unique email each run, so the collection can be run repeatedly",
+              "pm.collectionVariables.set('email', 'john.' + Date.now() + '@example.com');"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('userId', pm.response.json().userId);"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"{{email}}\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/users", "host": [ "{{baseUrl}}" ], "path": [ "api", "users" ] }
+          }
+        },
+        {
+          "name": "Get User",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Name is John Doe', () => pm.expect(pm.response.json().name).to.eql('John Doe'));"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/users/{{userId}}", "host": [ "{{baseUrl}}" ], "path": [ "api", "users", "{{userId}}" ] }
+          }
+        },
+        {
+          "name": "Create Account",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+              "pm.test('New account has zero balance', () => pm.expect(pm.response.json().balance).to.eql(0));",
+              "pm.collectionVariables.set('accountId', pm.response.json().accountId);"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": {{userId}},\n  \"accountType\": \"SAVINGS\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/accounts", "host": [ "{{baseUrl}}" ], "path": [ "api", "accounts" ] }
+          }
+        },
+        {
+          "name": "Get Account",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Shows the owner name', () => pm.expect(pm.response.json().userName).to.eql('John Doe'));"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/accounts/{{accountId}}", "host": [ "{{baseUrl}}" ], "path": [ "api", "accounts", "{{accountId}}" ] }
+          }
+        },
+        {
+          "name": "Deposit 500",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Balance is 500', () => pm.expect(pm.response.json().balance).to.eql(500));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 500\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/accounts/{{accountId}}/deposit", "host": [ "{{baseUrl}}" ], "path": [ "api", "accounts", "{{accountId}}", "deposit" ] }
+          }
+        },
+        {
+          "name": "Withdraw 200",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Balance is 300', () => pm.expect(pm.response.json().balance).to.eql(300));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 200\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/accounts/{{accountId}}/withdraw", "host": [ "{{baseUrl}}" ], "path": [ "api", "accounts", "{{accountId}}", "withdraw" ] }
+          }
+        },
+        {
+          "name": "Transaction History",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "const txns = pm.response.json();",
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Has 2 transactions', () => pm.expect(txns.length).to.eql(2));",
+              "pm.test('Newest first', () => pm.expect(txns[0].type).to.eql('WITHDRAW'));"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/accounts/{{accountId}}/transactions", "host": [ "{{baseUrl}}" ], "path": [ "api", "accounts", "{{accountId}}", "transactions" ] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Business rules and errors",
+      "item": [
+        {
+          "name": "Withdraw more than balance (400)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+              "pm.test('Says insufficient funds', () => pm.expect(pm.response.json().message).to.include('Insufficient funds'));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 1000\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/accounts/{{accountId}}/withdraw", "host": [ "{{baseUrl}}" ], "path": [ "api", "accounts", "{{accountId}}", "withdraw" ] }
+          }
+        },
+        {
+          "name": "Deposit negative amount (400)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": -50\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/accounts/{{accountId}}/deposit", "host": [ "{{baseUrl}}" ], "path": [ "api", "accounts", "{{accountId}}", "deposit" ] }
+          }
+        },
+        {
+          "name": "Deposit zero (400)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 0\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/accounts/{{accountId}}/deposit", "host": [ "{{baseUrl}}" ], "path": [ "api", "accounts", "{{accountId}}", "deposit" ] }
+          }
+        },
+        {
+          "name": "Deposit with 3 decimal places (400)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 10.005\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/accounts/{{accountId}}/deposit", "host": [ "{{baseUrl}}" ], "path": [ "api", "accounts", "{{accountId}}", "deposit" ] }
+          }
+        },
+        {
+          "name": "Deposit with missing amount (400)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+              "pm.test('Reports the amount field', () => pm.expect(pm.response.json().fieldErrors).to.have.property('amount'));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/accounts/{{accountId}}/deposit", "host": [ "{{baseUrl}}" ], "path": [ "api", "accounts", "{{accountId}}", "deposit" ] }
+          }
+        },
+        {
+          "name": "Create user with invalid data (400)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "const errors = pm.response.json().fieldErrors;",
+              "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+              "pm.test('Reports name and email', () => pm.expect(errors).to.have.all.keys('name', 'email'));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"\",\n  \"email\": \"not-an-email\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/users", "host": [ "{{baseUrl}}" ], "path": [ "api", "users" ] }
+          }
+        },
+        {
+          "name": "Duplicate email (409)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status is 409', () => pm.response.to.have.status(409));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"John Again\",\n  \"email\": \"{{email}}\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/users", "host": [ "{{baseUrl}}" ], "path": [ "api", "users" ] }
+          }
+        },
+        {
+          "name": "Invalid account type (400)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": {{userId}},\n  \"accountType\": \"GOLD\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/accounts", "host": [ "{{baseUrl}}" ], "path": [ "api", "accounts" ] }
+          }
+        },
+        {
+          "name": "Account for unknown user (404)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"userId\": 99999,\n  \"accountType\": \"CHECKING\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/accounts", "host": [ "{{baseUrl}}" ], "path": [ "api", "accounts" ] }
+          }
+        },
+        {
+          "name": "Unknown account (404)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/accounts/99999", "host": [ "{{baseUrl}}" ], "path": [ "api", "accounts", "99999" ] }
+          }
+        },
+        {
+          "name": "Balance unchanged after failed requests",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+              "pm.test('Balance is still 300', () => pm.expect(pm.response.json().balance).to.eql(300));"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/accounts/{{accountId}}", "host": [ "{{baseUrl}}" ], "path": [ "api", "accounts", "{{accountId}}" ] }
+          }
+        }
+      ]
+    }
+  ]
+}
