@@ -4,12 +4,15 @@ import com.simplebank.dto.AccountResponse;
 import com.simplebank.dto.AmountRequest;
 import com.simplebank.dto.CreateAccountRequest;
 import com.simplebank.dto.TransactionResponse;
+import com.simplebank.dto.UpdateAccountRequest;
 import com.simplebank.service.AccountService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,8 +21,8 @@ import java.net.URI;
 import java.util.List;
 
 /**
- * The endpoints from section 5.4. Controllers only deal with HTTP:
- * read the request, call the service, return the result.
+ * CRUD for accounts, plus deposit, withdraw, and transaction history (section 5.4).
+ * Controllers only deal with HTTP: read the request, call the service, return the result.
  */
 @RestController
 @RequestMapping("/api/accounts")
@@ -31,16 +34,36 @@ public class AccountController {
         this.accountService = accountService;
     }
 
+    // ----- CRUD -----
+
     @PostMapping
     public ResponseEntity<AccountResponse> createAccount(@Valid @RequestBody CreateAccountRequest request) {
         AccountResponse account = accountService.createAccount(request.userId(), request.accountType());
         return ResponseEntity.created(URI.create("/api/accounts/" + account.accountId())).body(account);
     }
 
+    @GetMapping
+    public List<AccountResponse> getAllAccounts() {
+        return accountService.getAllAccounts();
+    }
+
     @GetMapping("/{id}")
     public AccountResponse getAccount(@PathVariable Long id) {
         return accountService.getAccount(id);
     }
+
+    @PutMapping("/{id}")
+    public AccountResponse updateAccount(@PathVariable Long id, @Valid @RequestBody UpdateAccountRequest request) {
+        return accountService.updateAccount(id, request.accountType());
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteAccount(@PathVariable Long id) {
+        accountService.deleteAccount(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ----- Money -----
 
     @PostMapping("/{id}/deposit")
     public AccountResponse deposit(@PathVariable Long id, @Valid @RequestBody AmountRequest request) {

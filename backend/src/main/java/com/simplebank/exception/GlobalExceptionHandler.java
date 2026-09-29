@@ -33,8 +33,8 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), Map.of());
     }
 
-    @ExceptionHandler(DuplicateEmailException.class)
-    public ResponseEntity<ErrorResponse> handleDuplicateEmail(DuplicateEmailException ex) {
+    @ExceptionHandler({DuplicateEmailException.class, OperationNotAllowedException.class})
+    public ResponseEntity<ErrorResponse> handleConflict(RuntimeException ex) {
         return build(HttpStatus.CONFLICT, ex.getMessage(), Map.of());
     }
 
