@@ -7,11 +7,18 @@ import com.simplebank.exception.ResourceNotFoundException;
 import com.simplebank.model.User;
 import com.simplebank.repository.AccountRepository;
 import com.simplebank.repository.UserRepository;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+/**
+ * Every public method runs in a database transaction (@Transactional on the class):
+ * either all of its changes are saved, or none are.
+ */
 @Service
+@Transactional
 public class UserService {
 
     private final UserRepository userRepository;
@@ -22,18 +29,23 @@ public class UserService {
         this.accountRepository = accountRepository;
     }
 
+    @Transactional(readOnly = true)
     public List<UserResponse> getAllUsers() {
-        return userRepository.findAll().stream()
+        return userRepository.findAll(Sort.by("userId")).stream()
                 .map(UserResponse::from)
                 .toList();
     }
 
+    @Transactional(readOnly = true)
     public UserResponse getUser(Long userId) {
         return UserResponse.from(findUser(userId));
     }
 
-    /** synchronized so two requests can't register the same email at once. */
-    public synchronized UserResponse createUser(String name, String email) {
+    /**
+     * The email check gives a clear error in the normal case. If two requests race,
+     * the UNIQUE constraint in the database still rejects the second one.
+     */
+    public UserResponse createUser(String name, String email) {
         String normalizedEmail = normalizeEmail(email);
         if (userRepository.existsByEmail(normalizedEmail)) {
             throw new DuplicateEmailException(normalizedEmail);
@@ -42,7 +54,7 @@ public class UserService {
         return UserResponse.from(user);
     }
 
-    public synchronized UserResponse updateUser(Long userId, String name, String email) {
+    public UserResponse updateUser(Long userId, String name, String email) {
         User user = findUser(userId);
         String normalizedEmail = normalizeEmail(email);
 
@@ -60,13 +72,13 @@ public class UserService {
     }
 
     /** A user can only be deleted once all of their accounts are gone. */
-    public synchronized void deleteUser(Long userId) {
-        findUser(userId);
+    public void deleteUser(Long userId) {
+        User user = findUser(userId);
         if (accountRepository.existsByUserId(userId)) {
             throw new OperationNotAllowedException(
                     "User " + userId + " still has accounts. Delete their accounts first.");
         }
-        userRepository.deleteById(userId);
+        userRepository.delete(user);
     }
 
     private User findUser(Long userId) {

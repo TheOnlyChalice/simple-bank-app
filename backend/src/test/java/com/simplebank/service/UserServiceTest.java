@@ -5,36 +5,36 @@ import com.simplebank.exception.DuplicateEmailException;
 import com.simplebank.exception.OperationNotAllowedException;
 import com.simplebank.exception.ResourceNotFoundException;
 import com.simplebank.model.AccountType;
-import com.simplebank.repository.AccountRepository;
-import com.simplebank.repository.UserRepository;
-import com.simplebank.repository.inmemory.InMemoryAccountRepository;
-import com.simplebank.repository.inmemory.InMemoryTransactionRepository;
-import com.simplebank.repository.inmemory.InMemoryUserRepository;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * Runs against the H2 test database (src/test/resources/application.properties).
+ * @Transactional rolls back every test's changes, so each test starts with an empty database.
+ */
+@SpringBootTest
+@Transactional
 class UserServiceTest {
 
-    private UserService userService;
-    private AccountService accountService;
+    private static final Long UNKNOWN_ID = 999_999L;
 
-    @BeforeEach
-    void setUp() {
-        UserRepository userRepository = new InMemoryUserRepository();
-        AccountRepository accountRepository = new InMemoryAccountRepository();
-        userService = new UserService(userRepository, accountRepository);
-        accountService = new AccountService(accountRepository, userRepository, new InMemoryTransactionRepository());
-    }
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private AccountService accountService;
 
     // ----- Create / Read -----
 
     @Test
     void createUserNormalizesEmail() {
         UserResponse user = userService.createUser("  Jane Doe ", "  Jane@Example.COM ");
-        assertThat(user.userId()).isEqualTo(1L);
+        assertThat(user.userId()).isNotNull();
         assertThat(user.name()).isEqualTo("Jane Doe");
         assertThat(user.email()).isEqualTo("jane@example.com");
     }
@@ -48,7 +48,7 @@ class UserServiceTest {
 
     @Test
     void unknownUserThrowsNotFound() {
-        assertThatThrownBy(() -> userService.getUser(42L))
+        assertThatThrownBy(() -> userService.getUser(UNKNOWN_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -94,7 +94,7 @@ class UserServiceTest {
 
     @Test
     void updateUnknownUserThrowsNotFound() {
-        assertThatThrownBy(() -> userService.updateUser(42L, "Nobody", "nobody@example.com"))
+        assertThatThrownBy(() -> userService.updateUser(UNKNOWN_ID, "Nobody", "nobody@example.com"))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -123,7 +123,7 @@ class UserServiceTest {
 
     @Test
     void deleteUnknownUserThrowsNotFound() {
-        assertThatThrownBy(() -> userService.deleteUser(42L))
+        assertThatThrownBy(() -> userService.deleteUser(UNKNOWN_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 }

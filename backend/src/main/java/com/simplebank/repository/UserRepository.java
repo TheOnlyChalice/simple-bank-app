@@ -1,27 +1,18 @@
 package com.simplebank.repository;
 
 import com.simplebank.model.User;
+import org.springframework.data.jpa.repository.JpaRepository;
 
-import java.util.List;
 import java.util.Optional;
 
 /**
- * The service layer only depends on this interface.
- * Step 1: implemented in memory (InMemoryUserRepository).
- * Step 2: becomes "extends JpaRepository<User, Long>" -- the method names
- * below already follow Spring Data naming, so the services won't change.
+ * Spring Data JPA generates the implementation at startup.
+ * JpaRepository provides save, findById, findAll, deleteById, and more;
+ * the methods below are "derived queries": Spring builds the SQL from the method name.
  */
-public interface UserRepository {
-
-    User save(User user);
-
-    Optional<User> findById(Long userId);
+public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
 
-    List<User> findAll();
-
     boolean existsByEmail(String email);
-
-    void deleteById(Long userId);
 }

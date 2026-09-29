@@ -11,11 +11,11 @@ import com.simplebank.model.TransactionType;
 import com.simplebank.model.User;
 import com.simplebank.repository.TransactionRepository;
 import com.simplebank.repository.UserRepository;
-import com.simplebank.repository.inmemory.InMemoryAccountRepository;
-import com.simplebank.repository.inmemory.InMemoryTransactionRepository;
-import com.simplebank.repository.inmemory.InMemoryUserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -24,23 +24,29 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Plain unit tests: no Spring, no mocks. The in-memory repositories make
- * the service easy to test directly.
+ * Runs against the H2 test database (src/test/resources/application.properties).
+ * @Transactional rolls back every test's changes, so each test starts with an empty database.
  */
+@SpringBootTest
+@Transactional
 class AccountServiceTest {
 
-    private UserRepository userRepository;
-    private TransactionRepository transactionRepository;
+    private static final Long UNKNOWN_ID = 999_999L;
+
+    @Autowired
     private AccountService accountService;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private TransactionRepository transactionRepository;
+
     private Long userId;
     private Long accountId;
 
     @BeforeEach
     void setUp() {
-        userRepository = new InMemoryUserRepository();
-        transactionRepository = new InMemoryTransactionRepository();
-        accountService = new AccountService(new InMemoryAccountRepository(), userRepository, transactionRepository);
-
         userId = userRepository.save(new User("John Doe", "john@example.com")).getUserId();
         accountId = accountService.createAccount(userId, AccountType.SAVINGS).accountId();
     }
@@ -56,7 +62,7 @@ class AccountServiceTest {
 
     @Test
     void cannotCreateAccountForUnknownUser() {
-        assertThatThrownBy(() -> accountService.createAccount(999L, AccountType.CHECKING))
+        assertThatThrownBy(() -> accountService.createAccount(UNKNOWN_ID, AccountType.CHECKING))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -72,7 +78,7 @@ class AccountServiceTest {
 
     @Test
     void accountsForUnknownUserThrowsNotFound() {
-        assertThatThrownBy(() -> accountService.getAccountsForUser(999L))
+        assertThatThrownBy(() -> accountService.getAccountsForUser(UNKNOWN_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -88,9 +94,9 @@ class AccountServiceTest {
 
     @Test
     void unknownAccountThrowsNotFound() {
-        assertThatThrownBy(() -> accountService.getAccount(999L))
+        assertThatThrownBy(() -> accountService.getAccount(UNKNOWN_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
-        assertThatThrownBy(() -> accountService.getTransactions(999L))
+        assertThatThrownBy(() -> accountService.getTransactions(UNKNOWN_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -108,7 +114,7 @@ class AccountServiceTest {
 
     @Test
     void updateUnknownAccountThrowsNotFound() {
-        assertThatThrownBy(() -> accountService.updateAccount(999L, AccountType.CHECKING))
+        assertThatThrownBy(() -> accountService.updateAccount(UNKNOWN_ID, AccountType.CHECKING))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -219,7 +225,7 @@ class AccountServiceTest {
 
     @Test
     void deleteUnknownAccountThrowsNotFound() {
-        assertThatThrownBy(() -> accountService.deleteAccount(999L))
+        assertThatThrownBy(() -> accountService.deleteAccount(UNKNOWN_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 }

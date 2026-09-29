@@ -14,10 +14,15 @@ import com.simplebank.model.User;
 import com.simplebank.repository.AccountRepository;
 import com.simplebank.repository.TransactionRepository;
 import com.simplebank.repository.UserRepository;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * All banking business rules live here (project doc, section 6):
@@ -25,8 +30,12 @@ import java.util.List;
  *   2. Deposit (and withdraw) amounts must be positive
  *   3. Every deposit/withdrawal is recorded as a transaction
  * Plus: the balance can't be edited directly, and only empty accounts can be deleted.
+ *
+ * Every public method runs in a database transaction. Methods that change a balance
+ * lock the account row first, so concurrent requests on the same account take turns.
  */
 @Service
+@Transactional
 public class AccountService {
 
     /** Largest value a DECIMAL(10,2) column can hold. */
@@ -54,25 +63,33 @@ public class AccountService {
 
     // ----- Read -----
 
+    @Transactional(readOnly = true)
     public List<AccountResponse> getAllAccounts() {
-        return accountRepository.findAll().stream()
-                .map(account -> AccountResponse.from(account, findUser(account.getUserId())))
+        // Load all users once, instead of one query per account (avoids the "N+1 query" problem)
+        Map<Long, User> usersById = userRepository.findAll().stream()
+                .collect(Collectors.toMap(User::getUserId, Function.identity()));
+
+        return accountRepository.findAll(Sort.by("accountId")).stream()
+                .map(account -> AccountResponse.from(account, usersById.get(account.getUserId())))
                 .toList();
     }
 
+    @Transactional(readOnly = true)
     public AccountResponse getAccount(Long accountId) {
         Account account = findAccount(accountId);
         return AccountResponse.from(account, findUser(account.getUserId()));
     }
 
     /** One user -> many accounts. 404 if the user doesn't exist. */
+    @Transactional(readOnly = true)
     public List<AccountResponse> getAccountsForUser(Long userId) {
         User user = findUser(userId);
-        return accountRepository.findByUserId(userId).stream()
+        return accountRepository.findByUserIdOrderByAccountIdAsc(userId).stream()
                 .map(account -> AccountResponse.from(account, user))
                 .toList();
     }
 
+    @Transactional(readOnly = true)
     public List<TransactionResponse> getTransactions(Long accountId) {
         findAccount(accountId); // 404 for unknown accounts instead of an empty list
         return transactionRepository.findByAccountIdOrderByTxnIdDesc(accountId).stream()
@@ -90,14 +107,9 @@ public class AccountService {
         return AccountResponse.from(account, findUser(account.getUserId()));
     }
 
-    /*
-     * deposit and withdraw are synchronized so two requests can't read the same
-     * balance and overwrite each other's update. In Step 2 this is replaced by
-     * @Transactional plus a database row lock.
-     */
-    public synchronized AccountResponse deposit(Long accountId, BigDecimal amount) {
+    public AccountResponse deposit(Long accountId, BigDecimal amount) {
         BigDecimal validAmount = validateAmount(amount);
-        Account account = findAccount(accountId);
+        Account account = findAccountForUpdate(accountId);
 
         BigDecimal newBalance = account.getBalance().add(validAmount);
         if (newBalance.compareTo(MAX_BALANCE) > 0) {
@@ -110,9 +122,9 @@ public class AccountService {
         return AccountResponse.from(account, findUser(account.getUserId()));
     }
 
-    public synchronized AccountResponse withdraw(Long accountId, BigDecimal amount) {
+    public AccountResponse withdraw(Long accountId, BigDecimal amount) {
         BigDecimal validAmount = validateAmount(amount);
-        Account account = findAccount(accountId);
+        Account account = findAccountForUpdate(accountId);
 
         if (account.getBalance().compareTo(validAmount) < 0) {
             throw new InsufficientFundsException(account.getBalance(), validAmount);
@@ -127,14 +139,15 @@ public class AccountService {
     // ----- Delete -----
 
     /** Only empty accounts can be deleted, so money never disappears. Its transactions go with it. */
-    public synchronized void deleteAccount(Long accountId) {
-        Account account = findAccount(accountId);
+    public void deleteAccount(Long accountId) {
+        Account account = findAccountForUpdate(accountId);
         if (account.getBalance().compareTo(BigDecimal.ZERO) != 0) {
             throw new OperationNotAllowedException("Account " + accountId + " has a balance of "
                     + account.getBalance() + ". Withdraw the full balance before deleting it.");
         }
+        // Transactions first: the foreign key won't allow deleting an account they still point to
         transactionRepository.deleteByAccountId(accountId);
-        accountRepository.deleteById(accountId);
+        accountRepository.delete(account);
     }
 
     // ----- Helpers -----
@@ -155,6 +168,12 @@ public class AccountService {
 
     private Account findAccount(Long accountId) {
         return accountRepository.findById(accountId)
+                .orElseThrow(() -> new ResourceNotFoundException("Account", accountId));
+    }
+
+    /** Same as findAccount, but locks the row until this transaction ends. */
+    private Account findAccountForUpdate(Long accountId) {
+        return accountRepository.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new ResourceNotFoundException("Account", accountId));
     }
 

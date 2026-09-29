@@ -3,9 +3,11 @@ package com.simplebank.exception;
 import com.simplebank.dto.ErrorResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -43,6 +45,19 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), Map.of());
     }
 
+    // ----- Database -----
+
+    /**
+     * A database constraint rejected the change (e.g. two requests registering the same
+     * email at the same moment). The services check these rules first, so this is rare.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex) {
+        log.warn("Database constraint violation: {}", ex.getMostSpecificCause().getMessage());
+        return build(HttpStatus.CONFLICT,
+                "The request conflicts with existing data (for example, a duplicate email)", Map.of());
+    }
+
     // ----- Spring's exceptions (bad requests caught before reaching our code) -----
 
     /** @Valid failed on a request body (e.g. blank name, bad email). */
@@ -59,6 +74,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex) {
         return build(HttpStatus.BAD_REQUEST,
                 "Request body is missing, is not valid JSON, or contains an invalid value", Map.of());
+    }
+
+    /** A body was sent without "Content-Type: application/json". */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException ex) {
+        return build(HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                "Content-Type must be application/json", Map.of());
     }
 
     /** e.g. GET /api/accounts/abc */
