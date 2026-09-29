@@ -1,14 +1,14 @@
 package com.simplebank.api;
 
 import com.jayway.jsonpath.JsonPath;
+import com.simplebank.MongoTestBase;
+import com.simplebank.TestData;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
 import static org.hamcrest.Matchers.containsString;
@@ -26,11 +26,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Tests the HTTP layer for /api/users: URLs, status codes, headers, JSON, validation,
  * and the error format. MockMvc sends requests straight into Spring without a real server.
- * Runs against H2; @Transactional rolls back each test's changes.
+ * Runs against MongoDB in Docker (see MongoTestBase), emptied before each test.
  */
-@SpringBootTest
-@Transactional
-class UserApiTest {
+class UserApiTest extends MongoTestBase {
 
     @Autowired
     private WebApplicationContext context;
@@ -48,24 +46,34 @@ class UserApiTest {
     void createUserReturns201WithLocationAndBody() throws Exception {
         mockMvc.perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"name": "Jane Doe", "email": "Jane@Example.com"}
-                                """))
+                        .content(userJson("Jane Doe", "Jane@Example.com", TestData.ADDRESS_JSON)))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", startsWith("/api/users/")))
                 .andExpect(jsonPath("$.userId").isNumber())
                 .andExpect(jsonPath("$.name").value("Jane Doe"))
                 .andExpect(jsonPath("$.email").value("jane@example.com"))
+                .andExpect(jsonPath("$.address.city").value("Baltimore"))
+                .andExpect(jsonPath("$.address.zip").value("21201"))
                 .andExpect(jsonPath("$.createdAt").exists());
+    }
+
+    @Test
+    void stateIsStoredUppercase() throws Exception {
+        mockMvc.perform(post("/api/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(userJson("Jane", "jane@example.com",
+                                "{\"street\": \" 1 Oak Ave \", \"city\": \" Towson \", \"state\": \"md\", \"zip\": \"21204\"}")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.address.state").value("MD"))
+                .andExpect(jsonPath("$.address.city").value("Towson"))
+                .andExpect(jsonPath("$.address.street").value("1 Oak Ave"));
     }
 
     @Test
     void invalidUserReturns400WithFieldErrors() throws Exception {
         mockMvc.perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"name": "", "email": "not-an-email"}
-                                """))
+                        .content(userJson("", "not-an-email", TestData.ADDRESS_JSON)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").value("Validation failed"))
@@ -74,14 +82,32 @@ class UserApiTest {
     }
 
     @Test
+    void missingAddressReturns400() throws Exception {
+        mockMvc.perform(post("/api/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\": \"Jane\", \"email\": \"jane@example.com\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.address").value("address is required"));
+    }
+
+    @Test
+    void invalidStateAndZipReturn400WithFieldErrors() throws Exception {
+        mockMvc.perform(post("/api/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(userJson("Jane", "jane@example.com",
+                                "{\"street\": \"1 Oak Ave\", \"city\": \"Towson\", \"state\": \"Maryland\", \"zip\": \"2120\"}")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors['address.state']").value("state must be a 2-letter code, e.g. MD"))
+                .andExpect(jsonPath("$.fieldErrors['address.zip']", containsString("5 digits")));
+    }
+
+    @Test
     void duplicateEmailReturns409() throws Exception {
         createUser("Jane", "jane@example.com");
 
         mockMvc.perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"name": "Other Jane", "email": "JANE@example.com"}
-                                """))
+                        .content(userJson("Other Jane", "JANE@example.com", TestData.ADDRESS_JSON)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Conflict"))
                 .andExpect(jsonPath("$.message", containsString("jane@example.com")));
@@ -131,11 +157,11 @@ class UserApiTest {
 
         mockMvc.perform(put("/api/users/" + id)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"name": "Jane Smith", "email": "jane@example.com"}
-                                """))
+                        .content(userJson("Jane Smith", "jane@example.com",
+                                "{\"street\": \"9 Elm St\", \"city\": \"Annapolis\", \"state\": \"MD\", \"zip\": \"21401\"}")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Jane Smith"));
+                .andExpect(jsonPath("$.name").value("Jane Smith"))
+                .andExpect(jsonPath("$.address.city").value("Annapolis"));
     }
 
     @Test
@@ -166,7 +192,7 @@ class UserApiTest {
     @Test
     void missingContentTypeReturns415() throws Exception {
         mockMvc.perform(post("/api/users")
-                        .content("{\"name\": \"Jane\", \"email\": \"jane@example.com\"}"))
+                        .content(userJson("Jane", "jane@example.com", TestData.ADDRESS_JSON)))
                 .andExpect(status().isUnsupportedMediaType())
                 .andExpect(jsonPath("$.message").value("Content-Type must be application/json"));
     }
@@ -194,10 +220,14 @@ class UserApiTest {
 
     // ----- Helpers -----
 
+    private static String userJson(String name, String email, String addressJson) {
+        return "{\"name\": \"" + name + "\", \"email\": \"" + email + "\", \"address\": " + addressJson + "}";
+    }
+
     private long createUser(String name, String email) throws Exception {
         String json = mockMvc.perform(post("/api/users")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\": \"" + name + "\", \"email\": \"" + email + "\"}"))
+                        .content(userJson(name, email, TestData.ADDRESS_JSON)))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return JsonPath.<Number>read(json, "$.userId").longValue();

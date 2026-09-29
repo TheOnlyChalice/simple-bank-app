@@ -1,15 +1,15 @@
 package com.simplebank.api;
 
+import com.simplebank.MongoTestBase;
+
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
 import java.math.BigDecimal;
@@ -28,11 +28,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Tests the HTTP layer for /api/accounts and /api/transfers, plus CORS.
- * Runs against H2; @Transactional rolls back each test's changes.
+ * Runs against MongoDB in Docker (see MongoTestBase), emptied before each test.
  */
-@SpringBootTest
-@Transactional
-class AccountApiTest {
+class AccountApiTest extends MongoTestBase {
 
     @Autowired
     private WebApplicationContext context;
@@ -44,7 +42,7 @@ class AccountApiTest {
     void setUp() throws Exception {
         mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
         userId = readId(postJson("/api/users", """
-                {"name": "John Doe", "email": "john@example.com"}
+                {"name": "John Doe", "email": "john@example.com", "address": {"street": "100 Main St", "city": "Baltimore", "state": "MD", "zip": "21201"}}
                 """).andExpect(status().isCreated()), "$.userId");
     }
 

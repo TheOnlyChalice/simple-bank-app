@@ -5,7 +5,8 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 
 import java.util.List;
 
-public interface AccountRepository extends MongoRepository<Account, Long> {
+/** search(...) comes from AccountSearchRepository. */
+public interface AccountRepository extends MongoRepository<Account, Long>, AccountSearchRepository {
 
     /** All accounts owned by one user (one user -> many accounts), oldest first. */
     List<Account> findByUserIdOrderByAccountIdAsc(Long userId);

@@ -8,9 +8,11 @@ public record UserResponse(
         Long userId,
         String name,
         String email,
+        AddressDto address,
         LocalDateTime createdAt
 ) {
     public static UserResponse from(User user) {
-        return new UserResponse(user.getUserId(), user.getName(), user.getEmail(), user.getCreatedAt());
+        return new UserResponse(user.getUserId(), user.getName(), user.getEmail(),
+                AddressDto.from(user.getAddress()), user.getCreatedAt());
     }
 }

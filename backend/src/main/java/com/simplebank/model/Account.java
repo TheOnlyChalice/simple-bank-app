@@ -23,6 +23,8 @@ public class Account {
     @Indexed
     private Long userId;
 
+    /** Indexed so searches by balance range don't have to scan every account. */
+    @Indexed
     @Field(targetType = FieldType.DECIMAL128)
     private BigDecimal balance;
 

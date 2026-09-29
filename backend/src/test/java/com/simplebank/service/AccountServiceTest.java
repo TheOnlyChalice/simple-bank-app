@@ -1,5 +1,8 @@
 package com.simplebank.service;
 
+import com.simplebank.MongoTestBase;
+import com.simplebank.TestData;
+
 import com.simplebank.dto.AccountResponse;
 import com.simplebank.dto.PageResponse;
 import com.simplebank.dto.TransactionResponse;
@@ -17,8 +20,6 @@ import com.simplebank.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -27,12 +28,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Runs against the H2 test database (src/test/resources/application.properties).
- * @Transactional rolls back every test's changes, so each test starts with an empty database.
+ * Runs against MongoDB in Docker (see MongoTestBase), emptied before each test.
  */
-@SpringBootTest
-@Transactional
-class AccountServiceTest {
+class AccountServiceTest extends MongoTestBase {
 
     private static final Long UNKNOWN_ID = 999_999L;
 
@@ -50,7 +48,7 @@ class AccountServiceTest {
 
     @BeforeEach
     void setUp() {
-        userId = userRepository.save(new User("John Doe", "john@example.com")).getUserId();
+        userId = userRepository.save(new User("John Doe", "john@example.com", TestData.ADDRESS)).getUserId();
         accountId = accountService.createAccount(userId, AccountType.SAVINGS).accountId();
     }
 
@@ -87,7 +85,7 @@ class AccountServiceTest {
 
     @Test
     void getAllAccountsIncludesEveryUsersAccounts() {
-        Long janeId = userRepository.save(new User("Jane Doe", "jane@example.com")).getUserId();
+        Long janeId = userRepository.save(new User("Jane Doe", "jane@example.com", TestData.ADDRESS)).getUserId();
         accountService.createAccount(janeId, AccountType.CHECKING);
 
         assertThat(accountService.getAllAccounts(0, 20).content())
@@ -227,7 +225,7 @@ class AccountServiceTest {
 
     @Test
     void transferWorksBetweenDifferentUsers() {
-        Long janeId = userRepository.save(new User("Jane Doe", "jane@example.com")).getUserId();
+        Long janeId = userRepository.save(new User("Jane Doe", "jane@example.com", TestData.ADDRESS)).getUserId();
         Long janeAccountId = accountService.createAccount(janeId, AccountType.CHECKING).accountId();
         accountService.deposit(accountId, new BigDecimal("100"));
 

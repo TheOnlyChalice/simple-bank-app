@@ -5,8 +5,10 @@ import com.simplebank.dto.UserResponse;
 import com.simplebank.exception.DuplicateEmailException;
 import com.simplebank.exception.OperationNotAllowedException;
 import com.simplebank.exception.ResourceNotFoundException;
+import com.simplebank.model.Address;
 import com.simplebank.model.User;
 import com.simplebank.repository.AccountRepository;
+import com.simplebank.repository.UserFilter;
 import com.simplebank.repository.UserRepository;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -27,10 +29,16 @@ public class UserService {
         this.accountRepository = accountRepository;
     }
 
-    /** One page of users, oldest first. Pages are numbered from 0. */
+    /** One page of all users, oldest first. Pages are numbered from 0. */
     public PageResponse<UserResponse> getAllUsers(int page, int size) {
+        return getAllUsers(UserFilter.NONE, page, size);
+    }
+
+    /** One page of users matching the filter (address and/or balance), oldest first. */
+    public PageResponse<UserResponse> getAllUsers(UserFilter filter, int page, int size) {
         Pageable pageable = Paging.of(page, size, Sort.by("userId"));
-        return PageResponse.from(userRepository.findAll(pageable).map(UserResponse::from));
+        SearchRules.checkBalanceRange(filter.minBalance(), filter.maxBalance());
+        return PageResponse.from(userRepository.search(filter, pageable).map(UserResponse::from));
     }
 
     public UserResponse getUser(Long userId) {
@@ -41,16 +49,16 @@ public class UserService {
      * The email check gives a clear error in the normal case. If two requests race,
      * the unique index on email still rejects the second one.
      */
-    public UserResponse createUser(String name, String email) {
+    public UserResponse createUser(String name, String email, Address address) {
         String normalizedEmail = normalizeEmail(email);
         if (userRepository.existsByEmail(normalizedEmail)) {
             throw new DuplicateEmailException(normalizedEmail);
         }
-        User user = userRepository.save(new User(name.trim(), normalizedEmail));
+        User user = userRepository.save(new User(name.trim(), normalizedEmail, normalizeAddress(address)));
         return UserResponse.from(user);
     }
 
-    public UserResponse updateUser(Long userId, String name, String email) {
+    public UserResponse updateUser(Long userId, String name, String email, Address address) {
         User user = findUser(userId);
         String normalizedEmail = normalizeEmail(email);
 
@@ -64,6 +72,7 @@ public class UserService {
 
         user.setName(name.trim());
         user.setEmail(normalizedEmail);
+        user.setAddress(normalizeAddress(address));
         return UserResponse.from(userRepository.save(user));
     }
 
@@ -84,5 +93,14 @@ public class UserService {
 
     private String normalizeEmail(String email) {
         return email.trim().toLowerCase();
+    }
+
+    /** Trims every field and stores the state uppercase ("md" becomes "MD"), so searches match. */
+    private Address normalizeAddress(Address address) {
+        return new Address(
+                address.street().trim(),
+                address.city().trim(),
+                address.state().trim().toUpperCase(),
+                address.zip().trim());
     }
 }

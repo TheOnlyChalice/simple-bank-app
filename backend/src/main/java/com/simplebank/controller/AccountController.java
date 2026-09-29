@@ -6,6 +6,8 @@ import com.simplebank.dto.CreateAccountRequest;
 import com.simplebank.dto.PageResponse;
 import com.simplebank.dto.TransactionResponse;
 import com.simplebank.dto.UpdateAccountRequest;
+import com.simplebank.model.AccountType;
+import com.simplebank.repository.AccountFilter;
 import com.simplebank.service.AccountService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -19,10 +21,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.net.URI;
 
 /**
- * CRUD for accounts, plus deposit, withdraw, and transaction history (section 5.4).
+ * CRUD and search for accounts, plus deposit, withdraw, and transaction history (section 5.4).
  * Controllers only deal with HTTP: read the request, call the service, return the result.
  */
 @RestController
@@ -43,12 +46,19 @@ public class AccountController {
         return ResponseEntity.created(URI.create("/api/accounts/" + account.accountId())).body(account);
     }
 
-    /** Paginated, oldest first, e.g. /api/accounts?page=0&size=20 */
+    /**
+     * Paginated, oldest first, with optional filters, e.g.
+     * /api/accounts?minBalance=100&maxBalance=500&accountType=SAVINGS
+     */
     @GetMapping
     public PageResponse<AccountResponse> getAllAccounts(
+            @RequestParam(required = false) BigDecimal minBalance,
+            @RequestParam(required = false) BigDecimal maxBalance,
+            @RequestParam(required = false) AccountType accountType,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return accountService.getAllAccounts(page, size);
+        AccountFilter filter = new AccountFilter(minBalance, maxBalance, accountType);
+        return accountService.getAllAccounts(filter, page, size);
     }
 
     @GetMapping("/{id}")

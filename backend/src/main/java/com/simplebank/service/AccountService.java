@@ -14,6 +14,7 @@ import com.simplebank.model.AccountType;
 import com.simplebank.model.Transaction;
 import com.simplebank.model.TransactionType;
 import com.simplebank.model.User;
+import com.simplebank.repository.AccountFilter;
 import com.simplebank.repository.AccountRepository;
 import com.simplebank.repository.TransactionRepository;
 import com.simplebank.repository.UserRepository;
@@ -72,10 +73,16 @@ public class AccountService {
 
     // ----- Read -----
 
-    /** One page of accounts, oldest first. Pages are numbered from 0. */
+    /** One page of all accounts, oldest first. Pages are numbered from 0. */
     public PageResponse<AccountResponse> getAllAccounts(int page, int size) {
+        return getAllAccounts(AccountFilter.NONE, page, size);
+    }
+
+    /** One page of accounts matching the filter (balance range and/or type), oldest first. */
+    public PageResponse<AccountResponse> getAllAccounts(AccountFilter filter, int page, int size) {
         Pageable pageable = Paging.of(page, size, Sort.by("accountId"));
-        Page<Account> accounts = accountRepository.findAll(pageable);
+        SearchRules.checkBalanceRange(filter.minBalance(), filter.maxBalance());
+        Page<Account> accounts = accountRepository.search(filter, pageable);
 
         // Load the owners of this page's accounts in one query, instead of one query
         // per account (avoids the "N+1 query" problem)

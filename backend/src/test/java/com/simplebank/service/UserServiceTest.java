@@ -1,5 +1,8 @@
 package com.simplebank.service;
 
+import com.simplebank.MongoTestBase;
+import com.simplebank.TestData;
+
 import com.simplebank.dto.PageResponse;
 import com.simplebank.dto.UserResponse;
 import com.simplebank.exception.DuplicateEmailException;
@@ -8,19 +11,14 @@ import com.simplebank.exception.ResourceNotFoundException;
 import com.simplebank.model.AccountType;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Runs against the H2 test database (src/test/resources/application.properties).
- * @Transactional rolls back every test's changes, so each test starts with an empty database.
+ * Runs against MongoDB in Docker (see MongoTestBase), emptied before each test.
  */
-@SpringBootTest
-@Transactional
-class UserServiceTest {
+class UserServiceTest extends MongoTestBase {
 
     private static final Long UNKNOWN_ID = 999_999L;
 
@@ -34,7 +32,7 @@ class UserServiceTest {
 
     @Test
     void createUserNormalizesEmail() {
-        UserResponse user = userService.createUser("  Jane Doe ", "  Jane@Example.COM ");
+        UserResponse user = userService.createUser("  Jane Doe ", "  Jane@Example.COM ", TestData.ADDRESS);
         assertThat(user.userId()).isNotNull();
         assertThat(user.name()).isEqualTo("Jane Doe");
         assertThat(user.email()).isEqualTo("jane@example.com");
@@ -42,8 +40,8 @@ class UserServiceTest {
 
     @Test
     void emailMustBeUnique() {
-        userService.createUser("Jane", "jane@example.com");
-        assertThatThrownBy(() -> userService.createUser("Other Jane", "JANE@example.com"))
+        userService.createUser("Jane", "jane@example.com", TestData.ADDRESS);
+        assertThatThrownBy(() -> userService.createUser("Other Jane", "JANE@example.com", TestData.ADDRESS))
                 .isInstanceOf(DuplicateEmailException.class);
     }
 
@@ -55,8 +53,8 @@ class UserServiceTest {
 
     @Test
     void getAllUsersReturnsEveryUserInIdOrder() {
-        userService.createUser("Jane", "jane@example.com");
-        userService.createUser("John", "john@example.com");
+        userService.createUser("Jane", "jane@example.com", TestData.ADDRESS);
+        userService.createUser("John", "john@example.com", TestData.ADDRESS);
 
         assertThat(userService.getAllUsers(0, 20).content())
                 .extracting(UserResponse::name)
@@ -66,7 +64,7 @@ class UserServiceTest {
     @Test
     void getAllUsersIsPaged() {
         for (int i = 1; i <= 3; i++) {
-            userService.createUser("User " + i, "user" + i + "@example.com");
+            userService.createUser("User " + i, "user" + i + "@example.com", TestData.ADDRESS);
         }
 
         PageResponse<UserResponse> secondPage = userService.getAllUsers(1, 2);
@@ -81,9 +79,9 @@ class UserServiceTest {
 
     @Test
     void updateUserChangesNameAndEmail() {
-        Long id = userService.createUser("Jane", "jane@example.com").userId();
+        Long id = userService.createUser("Jane", "jane@example.com", TestData.ADDRESS).userId();
 
-        UserResponse updated = userService.updateUser(id, "Jane Smith", "Jane.Smith@Example.com");
+        UserResponse updated = userService.updateUser(id, "Jane Smith", "Jane.Smith@Example.com", TestData.ADDRESS);
 
         assertThat(updated.name()).isEqualTo("Jane Smith");
         assertThat(updated.email()).isEqualTo("jane.smith@example.com");
@@ -92,24 +90,24 @@ class UserServiceTest {
 
     @Test
     void updateUserCanKeepTheirOwnEmail() {
-        Long id = userService.createUser("Jane", "jane@example.com").userId();
-        UserResponse updated = userService.updateUser(id, "Jane Smith", "jane@example.com");
+        Long id = userService.createUser("Jane", "jane@example.com", TestData.ADDRESS).userId();
+        UserResponse updated = userService.updateUser(id, "Jane Smith", "jane@example.com", TestData.ADDRESS);
         assertThat(updated.name()).isEqualTo("Jane Smith");
     }
 
     @Test
     void updateUserCannotTakeAnotherUsersEmail() {
-        userService.createUser("Jane", "jane@example.com");
-        Long johnId = userService.createUser("John", "john@example.com").userId();
+        userService.createUser("Jane", "jane@example.com", TestData.ADDRESS);
+        Long johnId = userService.createUser("John", "john@example.com", TestData.ADDRESS).userId();
 
-        assertThatThrownBy(() -> userService.updateUser(johnId, "John", "jane@example.com"))
+        assertThatThrownBy(() -> userService.updateUser(johnId, "John", "jane@example.com", TestData.ADDRESS))
                 .isInstanceOf(DuplicateEmailException.class);
         assertThat(userService.getUser(johnId).email()).isEqualTo("john@example.com");
     }
 
     @Test
     void updateUnknownUserThrowsNotFound() {
-        assertThatThrownBy(() -> userService.updateUser(UNKNOWN_ID, "Nobody", "nobody@example.com"))
+        assertThatThrownBy(() -> userService.updateUser(UNKNOWN_ID, "Nobody", "nobody@example.com", TestData.ADDRESS))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -117,7 +115,7 @@ class UserServiceTest {
 
     @Test
     void deleteUserWithoutAccounts() {
-        Long id = userService.createUser("Jane", "jane@example.com").userId();
+        Long id = userService.createUser("Jane", "jane@example.com", TestData.ADDRESS).userId();
 
         userService.deleteUser(id);
 
@@ -128,7 +126,7 @@ class UserServiceTest {
 
     @Test
     void cannotDeleteUserWhoStillHasAccounts() {
-        Long id = userService.createUser("Jane", "jane@example.com").userId();
+        Long id = userService.createUser("Jane", "jane@example.com", TestData.ADDRESS).userId();
         accountService.createAccount(id, AccountType.SAVINGS);
 
         assertThatThrownBy(() -> userService.deleteUser(id))
