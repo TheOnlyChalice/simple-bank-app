@@ -49,19 +49,32 @@ CREATE TABLE accounts (
 );
 
 -- ---------------------------------------------------------------------
--- TRANSACTIONS: one row per deposit or withdrawal
+-- TRANSACTIONS: one row per deposit, withdrawal, or side of a transfer.
+-- A transfer writes two rows: TRANSFER_OUT on the sending account and
+-- TRANSFER_IN on the receiving account, each pointing at the other
+-- through related_account_id.
+--
+-- related_account_id has no foreign key on purpose: it is a historical
+-- record, and must survive if the other account is later deleted.
 -- ---------------------------------------------------------------------
 CREATE TABLE transactions (
-    txn_id      BIGINT         NOT NULL AUTO_INCREMENT,
-    account_id  BIGINT         NOT NULL,
-    txn_type    VARCHAR(20)    NOT NULL,
-    amount      DECIMAL(10,2)  NOT NULL,
-    created_at  DATETIME(6)    NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    txn_id              BIGINT         NOT NULL AUTO_INCREMENT,
+    account_id          BIGINT         NOT NULL,
+    txn_type            VARCHAR(20)    NOT NULL,
+    amount              DECIMAL(10,2)  NOT NULL,
+    related_account_id  BIGINT         NULL,
+    created_at          DATETIME(6)    NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
     CONSTRAINT pk_transactions PRIMARY KEY (txn_id),
     CONSTRAINT fk_transactions_account FOREIGN KEY (account_id) REFERENCES accounts (account_id),
     CONSTRAINT chk_transactions_amount CHECK (amount > 0),
-    CONSTRAINT chk_transactions_type CHECK (txn_type IN ('DEPOSIT', 'WITHDRAW'))
+    CONSTRAINT chk_transactions_type
+        CHECK (txn_type IN ('DEPOSIT', 'WITHDRAW', 'TRANSFER_IN', 'TRANSFER_OUT')),
+    -- Transfers must name the other account; deposits and withdrawals must not
+    CONSTRAINT chk_transactions_related CHECK (
+        (txn_type IN ('TRANSFER_IN', 'TRANSFER_OUT') AND related_account_id IS NOT NULL)
+        OR (txn_type IN ('DEPOSIT', 'WITHDRAW') AND related_account_id IS NULL)
+    )
 );
 
 -- Speeds up "transaction history for account X, newest first"

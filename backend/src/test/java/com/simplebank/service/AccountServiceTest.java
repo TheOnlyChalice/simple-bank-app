@@ -2,8 +2,10 @@ package com.simplebank.service;
 
 import com.simplebank.dto.AccountResponse;
 import com.simplebank.dto.TransactionResponse;
+import com.simplebank.dto.TransferResponse;
 import com.simplebank.exception.InsufficientFundsException;
 import com.simplebank.exception.InvalidAmountException;
+import com.simplebank.exception.InvalidRequestException;
 import com.simplebank.exception.OperationNotAllowedException;
 import com.simplebank.exception.ResourceNotFoundException;
 import com.simplebank.model.AccountType;
@@ -198,6 +200,91 @@ class AccountServiceTest {
         List<TransactionResponse> txns = accountService.getTransactions(accountId);
         assertThat(txns.get(0).type()).isEqualTo(TransactionType.WITHDRAW);
         assertThat(txns.get(1).type()).isEqualTo(TransactionType.DEPOSIT);
+    }
+
+    // ----- Transfer -----
+
+    @Test
+    void transferMovesMoneyAndRecordsBothSides() {
+        Long otherId = accountService.createAccount(userId, AccountType.CHECKING).accountId();
+        accountService.deposit(accountId, new BigDecimal("500"));
+
+        TransferResponse result = accountService.transfer(accountId, otherId, new BigDecimal("200"));
+
+        assertThat(result.fromAccount().balance()).isEqualByComparingTo("300.00");
+        assertThat(result.toAccount().balance()).isEqualByComparingTo("200.00");
+        assertThat(result.amount()).isEqualByComparingTo("200.00");
+
+        TransactionResponse out = accountService.getTransactions(accountId).get(0);
+        assertThat(out.type()).isEqualTo(TransactionType.TRANSFER_OUT);
+        assertThat(out.relatedAccountId()).isEqualTo(otherId);
+
+        TransactionResponse in = accountService.getTransactions(otherId).get(0);
+        assertThat(in.type()).isEqualTo(TransactionType.TRANSFER_IN);
+        assertThat(in.relatedAccountId()).isEqualTo(accountId);
+    }
+
+    @Test
+    void transferWorksBetweenDifferentUsers() {
+        Long janeId = userRepository.save(new User("Jane Doe", "jane@example.com")).getUserId();
+        Long janeAccountId = accountService.createAccount(janeId, AccountType.CHECKING).accountId();
+        accountService.deposit(accountId, new BigDecimal("100"));
+
+        TransferResponse result = accountService.transfer(accountId, janeAccountId, new BigDecimal("40"));
+
+        assertThat(result.toAccount().userName()).isEqualTo("Jane Doe");
+        assertThat(result.toAccount().balance()).isEqualByComparingTo("40.00");
+    }
+
+    @Test
+    void cannotTransferMoreThanBalance() {
+        Long otherId = accountService.createAccount(userId, AccountType.CHECKING).accountId();
+        accountService.deposit(accountId, new BigDecimal("100"));
+
+        assertThatThrownBy(() -> accountService.transfer(accountId, otherId, new BigDecimal("150")))
+                .isInstanceOf(InsufficientFundsException.class);
+
+        // Nothing changed on either side
+        assertThat(accountService.getAccount(accountId).balance()).isEqualByComparingTo("100.00");
+        assertThat(accountService.getAccount(otherId).balance()).isEqualByComparingTo("0.00");
+        assertThat(accountService.getTransactions(otherId)).isEmpty();
+    }
+
+    @Test
+    void cannotTransferToSameAccount() {
+        accountService.deposit(accountId, new BigDecimal("100"));
+        assertThatThrownBy(() -> accountService.transfer(accountId, accountId, new BigDecimal("10")))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    void transferAmountMustBePositive() {
+        Long otherId = accountService.createAccount(userId, AccountType.CHECKING).accountId();
+        assertThatThrownBy(() -> accountService.transfer(accountId, otherId, new BigDecimal("-5")))
+                .isInstanceOf(InvalidAmountException.class);
+    }
+
+    @Test
+    void transferToUnknownAccountThrowsNotFound() {
+        accountService.deposit(accountId, new BigDecimal("100"));
+
+        assertThatThrownBy(() -> accountService.transfer(accountId, UNKNOWN_ID, new BigDecimal("10")))
+                .isInstanceOf(ResourceNotFoundException.class);
+        assertThat(accountService.getAccount(accountId).balance()).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void historyKeepsTransfersAfterOtherAccountIsDeleted() {
+        Long otherId = accountService.createAccount(userId, AccountType.CHECKING).accountId();
+        accountService.deposit(accountId, new BigDecimal("100"));
+        accountService.transfer(accountId, otherId, new BigDecimal("100"));
+        accountService.withdraw(otherId, new BigDecimal("100"));
+
+        accountService.deleteAccount(otherId);
+
+        TransactionResponse out = accountService.getTransactions(accountId).get(0);
+        assertThat(out.type()).isEqualTo(TransactionType.TRANSFER_OUT);
+        assertThat(out.relatedAccountId()).isEqualTo(otherId);
     }
 
     // ----- Delete -----

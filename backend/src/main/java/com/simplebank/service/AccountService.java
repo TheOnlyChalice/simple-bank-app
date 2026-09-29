@@ -2,8 +2,10 @@ package com.simplebank.service;
 
 import com.simplebank.dto.AccountResponse;
 import com.simplebank.dto.TransactionResponse;
+import com.simplebank.dto.TransferResponse;
 import com.simplebank.exception.InsufficientFundsException;
 import com.simplebank.exception.InvalidAmountException;
+import com.simplebank.exception.InvalidRequestException;
 import com.simplebank.exception.OperationNotAllowedException;
 import com.simplebank.exception.ResourceNotFoundException;
 import com.simplebank.model.Account;
@@ -134,6 +136,49 @@ public class AccountService {
         accountRepository.save(account);
         transactionRepository.save(new Transaction(accountId, TransactionType.WITHDRAW, validAmount));
         return AccountResponse.from(account, findUser(account.getUserId()));
+    }
+
+    // ----- Transfer -----
+
+    /**
+     * Moves money between two accounts in one database transaction: both balances
+     * change and both history rows are written, or nothing happens at all.
+     */
+    public TransferResponse transfer(Long fromAccountId, Long toAccountId, BigDecimal amount) {
+        if (fromAccountId.equals(toAccountId)) {
+            throw new InvalidRequestException("Cannot transfer to the same account");
+        }
+        BigDecimal validAmount = validateAmount(amount);
+
+        // Lock both rows, always the lower ID first. Two transfers running in opposite
+        // directions then lock in the same order, so they can't deadlock each other.
+        long firstId = Math.min(fromAccountId, toAccountId);
+        long secondId = Math.max(fromAccountId, toAccountId);
+        Account first = findAccountForUpdate(firstId);
+        Account second = findAccountForUpdate(secondId);
+        Account from = first.getAccountId().equals(fromAccountId) ? first : second;
+        Account to = (from == first) ? second : first;
+
+        if (from.getBalance().compareTo(validAmount) < 0) {
+            throw new InsufficientFundsException(from.getBalance(), validAmount);
+        }
+        BigDecimal newToBalance = to.getBalance().add(validAmount);
+        if (newToBalance.compareTo(MAX_BALANCE) > 0) {
+            throw new InvalidAmountException("Transfer would exceed the maximum balance of "
+                    + MAX_BALANCE + " in account " + toAccountId);
+        }
+
+        from.setBalance(from.getBalance().subtract(validAmount));
+        to.setBalance(newToBalance);
+        accountRepository.save(from);
+        accountRepository.save(to);
+        transactionRepository.save(new Transaction(fromAccountId, TransactionType.TRANSFER_OUT, validAmount, toAccountId));
+        transactionRepository.save(new Transaction(toAccountId, TransactionType.TRANSFER_IN, validAmount, fromAccountId));
+
+        return new TransferResponse(
+                AccountResponse.from(from, findUser(from.getUserId())),
+                AccountResponse.from(to, findUser(to.getUserId())),
+                validAmount);
     }
 
     // ----- Delete -----

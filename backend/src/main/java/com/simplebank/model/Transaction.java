@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 
 /**
  * JPA entity mapped to the TRANSACTIONS table (see database/schema.sql).
- * A new Transaction is recorded for every deposit and withdrawal.
+ * One row per deposit, withdrawal, or side of a transfer.
  */
 @Entity
 @Table(name = "transactions")
@@ -39,6 +39,10 @@ public class Transaction {
     @Column(name = "amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
 
+    /** For transfers: the other account. Null for deposits and withdrawals. */
+    @Column(name = "related_account_id")
+    private Long relatedAccountId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -46,10 +50,17 @@ public class Transaction {
     public Transaction() {
     }
 
+    /** Deposit or withdrawal. */
     public Transaction(Long accountId, TransactionType txnType, BigDecimal amount) {
+        this(accountId, txnType, amount, null);
+    }
+
+    /** One side of a transfer; relatedAccountId is the other account. */
+    public Transaction(Long accountId, TransactionType txnType, BigDecimal amount, Long relatedAccountId) {
         this.accountId = accountId;
         this.txnType = txnType;
         this.amount = amount;
+        this.relatedAccountId = relatedAccountId;
         this.createdAt = LocalDateTime.now();
     }
 
@@ -64,6 +75,9 @@ public class Transaction {
 
     public BigDecimal getAmount() { return amount; }
     public void setAmount(BigDecimal amount) { this.amount = amount; }
+
+    public Long getRelatedAccountId() { return relatedAccountId; }
+    public void setRelatedAccountId(Long relatedAccountId) { this.relatedAccountId = relatedAccountId; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

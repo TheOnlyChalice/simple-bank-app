@@ -40,7 +40,7 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), Map.of());
     }
 
-    @ExceptionHandler({InvalidAmountException.class, InsufficientFundsException.class})
+    @ExceptionHandler({InvalidAmountException.class, InsufficientFundsException.class, InvalidRequestException.class})
     public ResponseEntity<ErrorResponse> handleBusinessRule(RuntimeException ex) {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), Map.of());
     }
