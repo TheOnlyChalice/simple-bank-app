@@ -1,20 +1,48 @@
 package com.simplebank.model;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * One row of the TRANSACTIONS table.
+ * JPA entity mapped to the TRANSACTIONS table (see database/schema.sql).
  * A new Transaction is recorded for every deposit and withdrawal.
  */
+@Entity
+@Table(name = "transactions")
 public class Transaction {
 
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "txn_id")
     private Long txnId;
+
+    /** Foreign key to accounts.account_id. */
+    @Column(name = "account_id", nullable = false)
     private Long accountId;
+
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "txn_type", nullable = false, length = 20)
     private TransactionType txnType;
+
+    @Column(name = "amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    /** Required by JPA, which creates objects when loading rows. */
     public Transaction() {
     }
 
