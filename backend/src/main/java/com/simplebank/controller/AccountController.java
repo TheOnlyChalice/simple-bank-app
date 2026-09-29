@@ -3,6 +3,7 @@ package com.simplebank.controller;
 import com.simplebank.dto.AccountResponse;
 import com.simplebank.dto.AmountRequest;
 import com.simplebank.dto.CreateAccountRequest;
+import com.simplebank.dto.PageResponse;
 import com.simplebank.dto.TransactionResponse;
 import com.simplebank.dto.UpdateAccountRequest;
 import com.simplebank.service.AccountService;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
@@ -75,8 +77,12 @@ public class AccountController {
         return accountService.withdraw(id, request.amount());
     }
 
+    /** Paginated history, newest first, e.g. /api/accounts/1/transactions?page=0&size=10 */
     @GetMapping("/{id}/transactions")
-    public List<TransactionResponse> getTransactions(@PathVariable Long id) {
-        return accountService.getTransactions(id);
+    public PageResponse<TransactionResponse> getTransactions(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return accountService.getTransactions(id, page, size);
     }
 }

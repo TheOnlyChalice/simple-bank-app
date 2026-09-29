@@ -1,6 +1,7 @@
 package com.simplebank.service;
 
 import com.simplebank.dto.AccountResponse;
+import com.simplebank.dto.PageResponse;
 import com.simplebank.dto.TransactionResponse;
 import com.simplebank.dto.TransferResponse;
 import com.simplebank.exception.InsufficientFundsException;
@@ -16,6 +17,8 @@ import com.simplebank.model.User;
 import com.simplebank.repository.AccountRepository;
 import com.simplebank.repository.TransactionRepository;
 import com.simplebank.repository.UserRepository;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,7 +34,8 @@ import java.util.stream.Collectors;
  *   1. Cannot withdraw more than the balance
  *   2. Deposit (and withdraw) amounts must be positive
  *   3. Every deposit/withdrawal is recorded as a transaction
- * Plus: the balance can't be edited directly, and only empty accounts can be deleted.
+ * Plus: the balance can't be edited directly, only empty accounts can be deleted,
+ * and transfers move money between two accounts atomically.
  *
  * Every public method runs in a database transaction. Methods that change a balance
  * lock the account row first, so concurrent requests on the same account take turns.
@@ -42,6 +46,9 @@ public class AccountService {
 
     /** Largest value a DECIMAL(10,2) column can hold. */
     static final BigDecimal MAX_BALANCE = new BigDecimal("99999999.99");
+
+    /** Largest page of transaction history a client can ask for. */
+    static final int MAX_PAGE_SIZE = 100;
 
     private final AccountRepository accountRepository;
     private final UserRepository userRepository;
@@ -91,17 +98,25 @@ public class AccountService {
                 .toList();
     }
 
+    /** One page of an account's history, newest first. Pages are numbered from 0. */
     @Transactional(readOnly = true)
-    public List<TransactionResponse> getTransactions(Long accountId) {
-        findAccount(accountId); // 404 for unknown accounts instead of an empty list
-        return transactionRepository.findByAccountIdOrderByTxnIdDesc(accountId).stream()
-                .map(TransactionResponse::from)
-                .toList();
+    public PageResponse<TransactionResponse> getTransactions(Long accountId, int page, int size) {
+        if (page < 0) {
+            throw new InvalidRequestException("page must be 0 or greater");
+        }
+        if (size < 1 || size > MAX_PAGE_SIZE) {
+            throw new InvalidRequestException("size must be between 1 and " + MAX_PAGE_SIZE);
+        }
+        findAccount(accountId); // 404 for unknown accounts instead of an empty page
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "txnId"));
+        return PageResponse.from(
+                transactionRepository.findByAccountId(accountId, pageable).map(TransactionResponse::from));
     }
 
     // ----- Update -----
 
-    /** Only the account type can be changed. Money only moves through deposit/withdraw. */
+    /** Only the account type can be changed. Money only moves through deposit, withdraw, and transfer. */
     public AccountResponse updateAccount(Long accountId, AccountType accountType) {
         Account account = findAccount(accountId);
         account.setAccountType(accountType);

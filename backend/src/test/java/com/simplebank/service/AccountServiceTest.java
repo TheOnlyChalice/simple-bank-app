@@ -1,6 +1,7 @@
 package com.simplebank.service;
 
 import com.simplebank.dto.AccountResponse;
+import com.simplebank.dto.PageResponse;
 import com.simplebank.dto.TransactionResponse;
 import com.simplebank.dto.TransferResponse;
 import com.simplebank.exception.InsufficientFundsException;
@@ -98,7 +99,7 @@ class AccountServiceTest {
     void unknownAccountThrowsNotFound() {
         assertThatThrownBy(() -> accountService.getAccount(UNKNOWN_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
-        assertThatThrownBy(() -> accountService.getTransactions(UNKNOWN_ID))
+        assertThatThrownBy(() -> history(UNKNOWN_ID))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -127,7 +128,7 @@ class AccountServiceTest {
         AccountResponse account = accountService.deposit(accountId, new BigDecimal("500"));
 
         assertThat(account.balance()).isEqualByComparingTo("500.00");
-        List<TransactionResponse> txns = accountService.getTransactions(accountId);
+        List<TransactionResponse> txns = history(accountId);
         assertThat(txns).hasSize(1);
         assertThat(txns.get(0).type()).isEqualTo(TransactionType.DEPOSIT);
         assertThat(txns.get(0).amount()).isEqualByComparingTo("500.00");
@@ -139,7 +140,7 @@ class AccountServiceTest {
         AccountResponse account = accountService.withdraw(accountId, new BigDecimal("200"));
 
         assertThat(account.balance()).isEqualByComparingTo("300.00");
-        assertThat(accountService.getTransactions(accountId)).hasSize(2);
+        assertThat(history(accountId)).hasSize(2);
     }
 
     @Test
@@ -151,7 +152,7 @@ class AccountServiceTest {
 
         // A failed withdrawal must not change the balance or record a transaction
         assertThat(accountService.getAccount(accountId).balance()).isEqualByComparingTo("100.00");
-        assertThat(accountService.getTransactions(accountId)).hasSize(1);
+        assertThat(history(accountId)).hasSize(1);
     }
 
     @Test
@@ -167,7 +168,7 @@ class AccountServiceTest {
                 .isInstanceOf(InvalidAmountException.class);
         assertThatThrownBy(() -> accountService.deposit(accountId, new BigDecimal("-50")))
                 .isInstanceOf(InvalidAmountException.class);
-        assertThat(accountService.getTransactions(accountId)).isEmpty();
+        assertThat(history(accountId)).isEmpty();
     }
 
     @Test
@@ -197,7 +198,7 @@ class AccountServiceTest {
         accountService.deposit(accountId, new BigDecimal("100"));
         accountService.withdraw(accountId, new BigDecimal("40"));
 
-        List<TransactionResponse> txns = accountService.getTransactions(accountId);
+        List<TransactionResponse> txns = history(accountId);
         assertThat(txns.get(0).type()).isEqualTo(TransactionType.WITHDRAW);
         assertThat(txns.get(1).type()).isEqualTo(TransactionType.DEPOSIT);
     }
@@ -215,11 +216,11 @@ class AccountServiceTest {
         assertThat(result.toAccount().balance()).isEqualByComparingTo("200.00");
         assertThat(result.amount()).isEqualByComparingTo("200.00");
 
-        TransactionResponse out = accountService.getTransactions(accountId).get(0);
+        TransactionResponse out = history(accountId).get(0);
         assertThat(out.type()).isEqualTo(TransactionType.TRANSFER_OUT);
         assertThat(out.relatedAccountId()).isEqualTo(otherId);
 
-        TransactionResponse in = accountService.getTransactions(otherId).get(0);
+        TransactionResponse in = history(otherId).get(0);
         assertThat(in.type()).isEqualTo(TransactionType.TRANSFER_IN);
         assertThat(in.relatedAccountId()).isEqualTo(accountId);
     }
@@ -247,7 +248,7 @@ class AccountServiceTest {
         // Nothing changed on either side
         assertThat(accountService.getAccount(accountId).balance()).isEqualByComparingTo("100.00");
         assertThat(accountService.getAccount(otherId).balance()).isEqualByComparingTo("0.00");
-        assertThat(accountService.getTransactions(otherId)).isEmpty();
+        assertThat(history(otherId)).isEmpty();
     }
 
     @Test
@@ -282,9 +283,55 @@ class AccountServiceTest {
 
         accountService.deleteAccount(otherId);
 
-        TransactionResponse out = accountService.getTransactions(accountId).get(0);
+        TransactionResponse out = history(accountId).get(0);
         assertThat(out.type()).isEqualTo(TransactionType.TRANSFER_OUT);
         assertThat(out.relatedAccountId()).isEqualTo(otherId);
+    }
+
+    // ----- Pagination -----
+
+    /** The first 100 history entries, newest first. Plenty for these tests. */
+    private List<TransactionResponse> history(Long id) {
+        return accountService.getTransactions(id, 0, 100).content();
+    }
+
+    @Test
+    void transactionsArePagedNewestFirst() {
+        for (int i = 1; i <= 5; i++) {
+            accountService.deposit(accountId, new BigDecimal(i));
+        }
+
+        PageResponse<TransactionResponse> firstPage = accountService.getTransactions(accountId, 0, 2);
+        assertThat(firstPage.content()).extracting(TransactionResponse::amount)
+                .containsExactly(new BigDecimal("5.00"), new BigDecimal("4.00"));
+        assertThat(firstPage.totalElements()).isEqualTo(5);
+        assertThat(firstPage.totalPages()).isEqualTo(3);
+        assertThat(firstPage.first()).isTrue();
+        assertThat(firstPage.last()).isFalse();
+
+        PageResponse<TransactionResponse> lastPage = accountService.getTransactions(accountId, 2, 2);
+        assertThat(lastPage.content()).extracting(TransactionResponse::amount)
+                .containsExactly(new BigDecimal("1.00"));
+        assertThat(lastPage.last()).isTrue();
+    }
+
+    @Test
+    void pageBeyondTheEndIsEmpty() {
+        accountService.deposit(accountId, new BigDecimal("10"));
+
+        PageResponse<TransactionResponse> page = accountService.getTransactions(accountId, 5, 10);
+        assertThat(page.content()).isEmpty();
+        assertThat(page.totalElements()).isEqualTo(1);
+    }
+
+    @Test
+    void invalidPageParametersAreRejected() {
+        assertThatThrownBy(() -> accountService.getTransactions(accountId, -1, 10))
+                .isInstanceOf(InvalidRequestException.class);
+        assertThatThrownBy(() -> accountService.getTransactions(accountId, 0, 0))
+                .isInstanceOf(InvalidRequestException.class);
+        assertThatThrownBy(() -> accountService.getTransactions(accountId, 0, 101))
+                .isInstanceOf(InvalidRequestException.class);
     }
 
     // ----- Delete -----
