@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Simple Bank API",
-    "description": "Start the backend first (./mvnw spring-boot:run), then run the whole collection with the Runner, folders in order. 'Happy path' creates, reads and updates users and accounts and saves their IDs. 'Business rules and errors' checks that every rule returns the right status code. 'Cleanup' deletes everything that was created.",
+    "description": "Start the backend first (./mvnw spring-boot:run), then run the whole collection with the Runner, folders in order. 'Happy path' creates, reads and updates users and accounts, moves money (deposit, withdraw, transfer), and pages through history. 'Business rules and errors' checks that every rule returns the right status code. 'Cleanup' empties and deletes everything that was created.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -523,10 +523,176 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const txns = pm.response.json();",
+                  "const page = pm.response.json();",
                   "pm.test('Status is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Has 2 transactions', () => pm.expect(txns.length).to.eql(2));",
-                  "pm.test('Newest first', () => pm.expect(txns[0].type).to.eql('WITHDRAW'));"
+                  "pm.test('Has 2 transactions', () => pm.expect(page.content.length).to.eql(2));",
+                  "pm.test('Newest first', () => pm.expect(page.content[0].type).to.eql('WITHDRAW'));",
+                  "pm.test('Total is 2', () => pm.expect(page.totalElements).to.eql(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transfer 100 to Second Account",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromAccountId\": {{accountId}},\n  \"toAccountId\": {{accountId2}},\n  \"amount\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Sender balance is 200', () => pm.expect(pm.response.json().fromAccount.balance).to.eql(200));",
+                  "pm.test('Receiver balance is 100', () => pm.expect(pm.response.json().toAccount.balance).to.eql(100));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Second Account History",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{accountId2}}/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{accountId2}}",
+                "transactions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const txn = pm.response.json().content[0];",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Is a TRANSFER_IN', () => pm.expect(txn.type).to.eql('TRANSFER_IN'));",
+                  "pm.test('Came from the first account', () => pm.expect(txn.relatedAccountId).to.eql(Number(pm.collectionVariables.get('accountId'))));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Paged History (page 0, size 2)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{accountId}}/transactions?page=0&size=2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{accountId}}",
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "2"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const page = pm.response.json();",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('2 entries on this page', () => pm.expect(page.content.length).to.eql(2));",
+                  "pm.test('Newest is the transfer out', () => pm.expect(page.content[0].type).to.eql('TRANSFER_OUT'));",
+                  "pm.test('3 transactions in total', () => pm.expect(page.totalElements).to.eql(3));",
+                  "pm.test('2 pages in total', () => pm.expect(page.totalPages).to.eql(2));",
+                  "pm.test('Is the first page', () => pm.expect(page.first).to.eql(true));",
+                  "pm.test('Is not the last page', () => pm.expect(page.last).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Paged History (page 1, size 2)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{accountId}}/transactions?page=1&size=2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{accountId}}",
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "size",
+                  "value": "2"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const page = pm.response.json();",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('1 entry on this page', () => pm.expect(page.content.length).to.eql(1));",
+                  "pm.test('Oldest is the deposit', () => pm.expect(page.content[0].type).to.eql('DEPOSIT'));",
+                  "pm.test('Is the last page', () => pm.expect(page.last).to.eql(true));"
                 ]
               }
             }
@@ -1210,6 +1376,240 @@
           ]
         },
         {
+          "name": "Transfer more than balance (400)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromAccountId\": {{accountId}},\n  \"toAccountId\": {{accountId2}},\n  \"amount\": 10000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Says insufficient funds', () => pm.expect(pm.response.json().message).to.include('Insufficient funds'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transfer to same account (400)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromAccountId\": {{accountId}},\n  \"toAccountId\": {{accountId}},\n  \"amount\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transfer to unknown account (404)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromAccountId\": {{accountId}},\n  \"toAccountId\": 99999,\n  \"amount\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transfer with missing fields (400)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Reports both account fields', () => pm.expect(pm.response.json().fieldErrors).to.have.all.keys('fromAccountId', 'toAccountId'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "History with invalid page size (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{accountId}}/transactions?size=500",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{accountId}}",
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "size",
+                  "value": "500"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "History for unknown account (404)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/99999/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "99999",
+                "transactions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Delete account with money in it (409)",
           "request": {
             "method": "DELETE",
@@ -1295,18 +1695,19 @@
           ]
         },
         {
-          "name": "Balance unchanged after failed requests",
+          "name": "Balances unchanged after failed requests",
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/api/accounts/{{accountId}}",
+              "raw": "{{baseUrl}}/api/users/{{userId}}/accounts",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "accounts",
-                "{{accountId}}"
+                "users",
+                "{{userId}}",
+                "accounts"
               ]
             }
           },
@@ -1316,8 +1717,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "const byId = Object.fromEntries(pm.response.json().map(a => [a.accountId, a.balance]));",
                   "pm.test('Status is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Balance is still 300', () => pm.expect(pm.response.json().balance).to.eql(300));"
+                  "pm.test('First account still 200', () => pm.expect(byId[Number(pm.collectionVariables.get('accountId'))]).to.eql(200));",
+                  "pm.test('Second account still 100', () => pm.expect(byId[Number(pm.collectionVariables.get('accountId2'))]).to.eql(100));"
                 ]
               }
             }
@@ -1329,7 +1732,52 @@
       "name": "Cleanup (delete)",
       "item": [
         {
-          "name": "Delete empty account (204)",
+          "name": "Empty the second account",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{accountId2}}/withdraw",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{accountId2}}",
+                "withdraw"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Balance is 0', () => pm.expect(pm.response.json().balance).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete second account (204)",
           "request": {
             "method": "DELETE",
             "url": {
@@ -1357,7 +1805,7 @@
           ]
         },
         {
-          "name": "Withdraw remaining balance",
+          "name": "Empty the first account",
           "request": {
             "method": "POST",
             "url": {
@@ -1380,7 +1828,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"amount\": 300\n}",
+              "raw": "{\n  \"amount\": 200\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1402,7 +1850,7 @@
           ]
         },
         {
-          "name": "Delete account (204)",
+          "name": "Delete first account (204)",
           "request": {
             "method": "DELETE",
             "url": {
