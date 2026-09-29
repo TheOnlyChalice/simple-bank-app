@@ -1,5 +1,6 @@
 package com.simplebank.service;
 
+import com.simplebank.dto.PageResponse;
 import com.simplebank.dto.UserResponse;
 import com.simplebank.exception.DuplicateEmailException;
 import com.simplebank.exception.OperationNotAllowedException;
@@ -57,9 +58,23 @@ class UserServiceTest {
         userService.createUser("Jane", "jane@example.com");
         userService.createUser("John", "john@example.com");
 
-        assertThat(userService.getAllUsers())
+        assertThat(userService.getAllUsers(0, 20).content())
                 .extracting(UserResponse::name)
                 .containsExactly("Jane", "John");
+    }
+
+    @Test
+    void getAllUsersIsPaged() {
+        for (int i = 1; i <= 3; i++) {
+            userService.createUser("User " + i, "user" + i + "@example.com");
+        }
+
+        PageResponse<UserResponse> secondPage = userService.getAllUsers(1, 2);
+
+        assertThat(secondPage.content()).extracting(UserResponse::name).containsExactly("User 3");
+        assertThat(secondPage.totalElements()).isEqualTo(3);
+        assertThat(secondPage.totalPages()).isEqualTo(2);
+        assertThat(secondPage.last()).isTrue();
     }
 
     // ----- Update -----
@@ -108,7 +123,7 @@ class UserServiceTest {
 
         assertThatThrownBy(() -> userService.getUser(id))
                 .isInstanceOf(ResourceNotFoundException.class);
-        assertThat(userService.getAllUsers()).isEmpty();
+        assertThat(userService.getAllUsers(0, 20).content()).isEmpty();
     }
 
     @Test

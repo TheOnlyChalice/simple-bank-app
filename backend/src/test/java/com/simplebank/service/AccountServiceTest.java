@@ -90,7 +90,7 @@ class AccountServiceTest {
         Long janeId = userRepository.save(new User("Jane Doe", "jane@example.com")).getUserId();
         accountService.createAccount(janeId, AccountType.CHECKING);
 
-        assertThat(accountService.getAllAccounts())
+        assertThat(accountService.getAllAccounts(0, 20).content())
                 .extracting(AccountResponse::userName)
                 .containsExactly("John Doe", "Jane Doe");
     }

@@ -17,7 +17,7 @@ import com.simplebank.model.User;
 import com.simplebank.repository.AccountRepository;
 import com.simplebank.repository.TransactionRepository;
 import com.simplebank.repository.UserRepository;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -46,9 +47,6 @@ public class AccountService {
 
     /** Largest value a DECIMAL(10,2) column can hold. */
     static final BigDecimal MAX_BALANCE = new BigDecimal("99999999.99");
-
-    /** Largest page of transaction history a client can ask for. */
-    static final int MAX_PAGE_SIZE = 100;
 
     private final AccountRepository accountRepository;
     private final UserRepository userRepository;
@@ -72,15 +70,20 @@ public class AccountService {
 
     // ----- Read -----
 
+    /** One page of accounts, oldest first. Pages are numbered from 0. */
     @Transactional(readOnly = true)
-    public List<AccountResponse> getAllAccounts() {
-        // Load all users once, instead of one query per account (avoids the "N+1 query" problem)
-        Map<Long, User> usersById = userRepository.findAll().stream()
+    public PageResponse<AccountResponse> getAllAccounts(int page, int size) {
+        Pageable pageable = Paging.of(page, size, Sort.by("accountId"));
+        Page<Account> accounts = accountRepository.findAll(pageable);
+
+        // Load the owners of this page's accounts in one query, instead of one query
+        // per account (avoids the "N+1 query" problem)
+        Set<Long> userIds = accounts.stream().map(Account::getUserId).collect(Collectors.toSet());
+        Map<Long, User> usersById = userRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(User::getUserId, Function.identity()));
 
-        return accountRepository.findAll(Sort.by("accountId")).stream()
-                .map(account -> AccountResponse.from(account, usersById.get(account.getUserId())))
-                .toList();
+        return PageResponse.from(
+                accounts.map(account -> AccountResponse.from(account, usersById.get(account.getUserId()))));
     }
 
     @Transactional(readOnly = true)
@@ -101,15 +104,8 @@ public class AccountService {
     /** One page of an account's history, newest first. Pages are numbered from 0. */
     @Transactional(readOnly = true)
     public PageResponse<TransactionResponse> getTransactions(Long accountId, int page, int size) {
-        if (page < 0) {
-            throw new InvalidRequestException("page must be 0 or greater");
-        }
-        if (size < 1 || size > MAX_PAGE_SIZE) {
-            throw new InvalidRequestException("size must be between 1 and " + MAX_PAGE_SIZE);
-        }
+        Pageable pageable = Paging.of(page, size, Sort.by(Sort.Direction.DESC, "txnId"));
         findAccount(accountId); // 404 for unknown accounts instead of an empty page
-
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "txnId"));
         return PageResponse.from(
                 transactionRepository.findByAccountId(accountId, pageable).map(TransactionResponse::from));
     }

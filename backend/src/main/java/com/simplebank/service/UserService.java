@@ -1,5 +1,6 @@
 package com.simplebank.service;
 
+import com.simplebank.dto.PageResponse;
 import com.simplebank.dto.UserResponse;
 import com.simplebank.exception.DuplicateEmailException;
 import com.simplebank.exception.OperationNotAllowedException;
@@ -7,11 +8,10 @@ import com.simplebank.exception.ResourceNotFoundException;
 import com.simplebank.model.User;
 import com.simplebank.repository.AccountRepository;
 import com.simplebank.repository.UserRepository;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 /**
  * Every public method runs in a database transaction (@Transactional on the class):
@@ -29,11 +29,11 @@ public class UserService {
         this.accountRepository = accountRepository;
     }
 
+    /** One page of users, oldest first. Pages are numbered from 0. */
     @Transactional(readOnly = true)
-    public List<UserResponse> getAllUsers() {
-        return userRepository.findAll(Sort.by("userId")).stream()
-                .map(UserResponse::from)
-                .toList();
+    public PageResponse<UserResponse> getAllUsers(int page, int size) {
+        Pageable pageable = Paging.of(page, size, Sort.by("userId"));
+        return PageResponse.from(userRepository.findAll(pageable).map(UserResponse::from));
     }
 
     @Transactional(readOnly = true)

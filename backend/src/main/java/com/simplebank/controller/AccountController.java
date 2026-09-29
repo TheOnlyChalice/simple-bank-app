@@ -20,7 +20,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
-import java.util.List;
 
 /**
  * CRUD for accounts, plus deposit, withdraw, and transaction history (section 5.4).
@@ -44,9 +43,12 @@ public class AccountController {
         return ResponseEntity.created(URI.create("/api/accounts/" + account.accountId())).body(account);
     }
 
+    /** Paginated, oldest first, e.g. /api/accounts?page=0&size=20 */
     @GetMapping
-    public List<AccountResponse> getAllAccounts() {
-        return accountService.getAllAccounts();
+    public PageResponse<AccountResponse> getAllAccounts(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return accountService.getAllAccounts(page, size);
     }
 
     @GetMapping("/{id}")
