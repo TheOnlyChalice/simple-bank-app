@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Simple Bank API",
-    "description": "Start the backend first (./mvnw spring-boot:run), then run the whole collection with the Runner, folders in order. 'Happy path' creates, reads and updates users and accounts, moves money (deposit, withdraw, transfer), and pages through history. 'Business rules and errors' checks that every rule returns the right status code. 'Cleanup' empties and deletes everything that was created.",
+    "description": "Start the backend first (./mvnw spring-boot:run, connected to MongoDB Atlas), then run the whole collection with the Runner, folders in order. 'Happy path' creates, reads and updates users and accounts, moves money (deposit, withdraw, transfer), and pages through lists and history. 'Business rules and errors' checks that every rule returns the right status code. 'Cleanup' empties and deletes everything that was created.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -121,17 +121,27 @@
           ]
         },
         {
-          "name": "Get All Users",
+          "name": "Get All Users (paged)",
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/api/users",
+              "raw": "{{baseUrl}}/api/users?page=0&size=1",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "1"
+                }
               ]
             }
           },
@@ -141,8 +151,11 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "const page = pm.response.json();",
                   "pm.test('Status is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Includes the new user', () => pm.expect(pm.response.json().map(u => u.userId)).to.include(Number(pm.collectionVariables.get('userId'))));"
+                  "pm.test('One user on this page', () => pm.expect(page.content.length).to.eql(1));",
+                  "pm.test('Reports the total', () => pm.expect(page.totalElements).to.be.at.least(1));",
+                  "pm.test('Is the first page', () => pm.expect(page.first).to.eql(true));"
                 ]
               }
             }
@@ -310,17 +323,27 @@
           ]
         },
         {
-          "name": "Get All Accounts",
+          "name": "Get All Accounts (paged)",
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/api/accounts",
+              "raw": "{{baseUrl}}/api/accounts?page=0&size=1",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "accounts"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "1"
+                }
               ]
             }
           },
@@ -330,8 +353,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "const page = pm.response.json();",
                   "pm.test('Status is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Includes both new accounts', () => { const ids = pm.response.json().map(a => a.accountId); pm.expect(ids).to.include(Number(pm.collectionVariables.get('accountId'))); pm.expect(ids).to.include(Number(pm.collectionVariables.get('accountId2'))); });"
+                  "pm.test('One account on this page', () => pm.expect(page.content.length).to.eql(1));",
+                  "pm.test('At least the 2 new accounts exist', () => pm.expect(page.totalElements).to.be.at.least(2));"
                 ]
               }
             }
@@ -1540,6 +1565,40 @@
                 "exec": [
                   "pm.test('Status is 400', () => pm.response.to.have.status(400));",
                   "pm.test('Reports both account fields', () => pm.expect(pm.response.json().fieldErrors).to.have.all.keys('fromAccountId', 'toAccountId'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List users with invalid page size (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/users?size=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "size",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explains the size limit', () => pm.expect(pm.response.json().message).to.include('size'));"
                 ]
               }
             }
