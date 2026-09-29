@@ -1,52 +1,38 @@
 package com.simplebank.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
+import org.springframework.data.mongodb.core.mapping.FieldType;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * JPA entity mapped to the TRANSACTIONS table (see database/schema.sql).
- * One row per deposit, withdrawal, or side of a transfer.
+ * A document in the "transactions" collection: one per deposit, withdrawal,
+ * or side of a transfer. The index makes "history for account X, newest first" fast.
  */
-@Entity
-@Table(name = "transactions")
+@Document(collection = "transactions")
+@CompoundIndex(name = "account_history", def = "{'accountId': 1, '_id': -1}")
 public class Transaction {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "txn_id")
     private Long txnId;
 
-    /** Foreign key to accounts.account_id. */
-    @Column(name = "account_id", nullable = false)
     private Long accountId;
 
-    @Enumerated(EnumType.STRING)
-    @JdbcTypeCode(SqlTypes.VARCHAR)
-    @Column(name = "txn_type", nullable = false, length = 20)
+    /** Stored as its name, e.g. "DEPOSIT". */
     private TransactionType txnType;
 
-    @Column(name = "amount", nullable = false, precision = 10, scale = 2)
+    @Field(targetType = FieldType.DECIMAL128)
     private BigDecimal amount;
 
-    /** For transfers: the other account. Null for deposits and withdrawals. */
-    @Column(name = "related_account_id")
+    /** For transfers: the other account. Not stored for deposits and withdrawals. */
     private Long relatedAccountId;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    /** Required by JPA, which creates objects when loading rows. */
     public Transaction() {
     }
 

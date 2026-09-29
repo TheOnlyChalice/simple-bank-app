@@ -45,15 +45,23 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), Map.of());
     }
 
+    /** Still hitting write conflicts after retrying: nothing changed, and it's safe to try again. */
+    @ExceptionHandler(ConcurrentUpdateException.class)
+    public ResponseEntity<ErrorResponse> handleConcurrentUpdate(ConcurrentUpdateException ex) {
+        log.warn("Gave up after repeated write conflicts: {}", ex.getCause().getMessage());
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), Map.of());
+    }
+
     // ----- Database -----
 
     /**
-     * A database constraint rejected the change (e.g. two requests registering the same
-     * email at the same moment). The services check these rules first, so this is rare.
+     * A database rule rejected the change (e.g. two requests registering the same
+     * email at the same moment hit the unique index). The services check these
+     * rules first, so this is rare.
      */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex) {
-        log.warn("Database constraint violation: {}", ex.getMostSpecificCause().getMessage());
+        log.warn("Database rule violation: {}", ex.getMostSpecificCause().getMessage());
         return build(HttpStatus.CONFLICT,
                 "The request conflicts with existing data (for example, a duplicate email)", Map.of());
     }

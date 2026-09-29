@@ -1,16 +1,16 @@
 package com.simplebank.repository;
 
 import com.simplebank.model.User;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.mongodb.repository.MongoRepository;
 
 import java.util.Optional;
 
 /**
- * Spring Data JPA generates the implementation at startup.
- * JpaRepository provides save, findById, findAll, deleteById, and more;
- * the methods below are "derived queries": Spring builds the SQL from the method name.
+ * Spring Data MongoDB generates the implementation at startup.
+ * MongoRepository provides save, findById, findAll, delete, and more;
+ * the methods below are derived queries built from their names.
  */
-public interface UserRepository extends JpaRepository<User, Long> {
+public interface UserRepository extends MongoRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
 

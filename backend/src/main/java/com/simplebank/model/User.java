@@ -1,36 +1,29 @@
 package com.simplebank.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
 /**
- * JPA entity mapped to the USERS table (see database/schema.sql).
+ * A document in the "users" collection.
+ * The numeric ID is assigned from the "counters" collection when the user is first saved.
  */
-@Entity
-@Table(name = "users")
+@Document(collection = "users")
 public class User {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY) // MySQL AUTO_INCREMENT assigns the ID
-    @Column(name = "user_id")
     private Long userId;
 
-    @Column(name = "name", nullable = false, length = 100)
     private String name;
 
-    @Column(name = "email", nullable = false, length = 100, unique = true)
+    /** Unique index: MongoDB itself rejects a second user with the same email. */
+    @Indexed(unique = true)
     private String email;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    /** Required by JPA, which creates objects when loading rows. */
     public User() {
     }
 

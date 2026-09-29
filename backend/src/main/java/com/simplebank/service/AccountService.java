@@ -21,7 +21,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -38,26 +37,29 @@ import java.util.stream.Collectors;
  * Plus: the balance can't be edited directly, only empty accounts can be deleted,
  * and transfers move money between two accounts atomically.
  *
- * Every public method runs in a database transaction. Methods that change a balance
- * lock the account row first, so concurrent requests on the same account take turns.
+ * Every method that changes an account runs in a MongoDB transaction (transactions.run).
+ * If two requests change the same account at once, MongoDB aborts one with a write
+ * conflict, and it is retried with fresh data, so no update is ever lost.
  */
 @Service
-@Transactional
 public class AccountService {
 
-    /** Largest value a DECIMAL(10,2) column can hold. */
+    /** Largest balance or amount allowed (the old DECIMAL(10,2) limit). */
     static final BigDecimal MAX_BALANCE = new BigDecimal("99999999.99");
 
     private final AccountRepository accountRepository;
     private final UserRepository userRepository;
     private final TransactionRepository transactionRepository;
+    private final MongoTransactions transactions;
 
     public AccountService(AccountRepository accountRepository,
                           UserRepository userRepository,
-                          TransactionRepository transactionRepository) {
+                          TransactionRepository transactionRepository,
+                          MongoTransactions transactions) {
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
         this.transactionRepository = transactionRepository;
+        this.transactions = transactions;
     }
 
     // ----- Create -----
@@ -71,7 +73,6 @@ public class AccountService {
     // ----- Read -----
 
     /** One page of accounts, oldest first. Pages are numbered from 0. */
-    @Transactional(readOnly = true)
     public PageResponse<AccountResponse> getAllAccounts(int page, int size) {
         Pageable pageable = Paging.of(page, size, Sort.by("accountId"));
         Page<Account> accounts = accountRepository.findAll(pageable);
@@ -86,14 +87,12 @@ public class AccountService {
                 accounts.map(account -> AccountResponse.from(account, usersById.get(account.getUserId()))));
     }
 
-    @Transactional(readOnly = true)
     public AccountResponse getAccount(Long accountId) {
         Account account = findAccount(accountId);
         return AccountResponse.from(account, findUser(account.getUserId()));
     }
 
     /** One user -> many accounts. 404 if the user doesn't exist. */
-    @Transactional(readOnly = true)
     public List<AccountResponse> getAccountsForUser(Long userId) {
         User user = findUser(userId);
         return accountRepository.findByUserIdOrderByAccountIdAsc(userId).stream()
@@ -102,7 +101,6 @@ public class AccountService {
     }
 
     /** One page of an account's history, newest first. Pages are numbered from 0. */
-    @Transactional(readOnly = true)
     public PageResponse<TransactionResponse> getTransactions(Long accountId, int page, int size) {
         Pageable pageable = Paging.of(page, size, Sort.by(Sort.Direction.DESC, "txnId"));
         findAccount(accountId); // 404 for unknown accounts instead of an empty page
@@ -114,46 +112,53 @@ public class AccountService {
 
     /** Only the account type can be changed. Money only moves through deposit, withdraw, and transfer. */
     public AccountResponse updateAccount(Long accountId, AccountType accountType) {
-        Account account = findAccount(accountId);
-        account.setAccountType(accountType);
-        accountRepository.save(account);
-        return AccountResponse.from(account, findUser(account.getUserId()));
+        return transactions.run(() -> {
+            Account account = findAccount(accountId);
+            account.setAccountType(accountType);
+            accountRepository.save(account);
+            return AccountResponse.from(account, findUser(account.getUserId()));
+        });
     }
 
     public AccountResponse deposit(Long accountId, BigDecimal amount) {
         BigDecimal validAmount = validateAmount(amount);
-        Account account = findAccountForUpdate(accountId);
+        return transactions.run(() -> {
+            Account account = findAccount(accountId);
 
-        BigDecimal newBalance = account.getBalance().add(validAmount);
-        if (newBalance.compareTo(MAX_BALANCE) > 0) {
-            throw new InvalidAmountException("Deposit would exceed the maximum balance of " + MAX_BALANCE);
-        }
+            BigDecimal newBalance = account.getBalance().add(validAmount);
+            if (newBalance.compareTo(MAX_BALANCE) > 0) {
+                throw new InvalidAmountException("Deposit would exceed the maximum balance of " + MAX_BALANCE);
+            }
 
-        account.setBalance(newBalance);
-        accountRepository.save(account);
-        transactionRepository.save(new Transaction(accountId, TransactionType.DEPOSIT, validAmount));
-        return AccountResponse.from(account, findUser(account.getUserId()));
+            account.setBalance(newBalance);
+            accountRepository.save(account);
+            transactionRepository.save(new Transaction(accountId, TransactionType.DEPOSIT, validAmount));
+            return AccountResponse.from(account, findUser(account.getUserId()));
+        });
     }
 
     public AccountResponse withdraw(Long accountId, BigDecimal amount) {
         BigDecimal validAmount = validateAmount(amount);
-        Account account = findAccountForUpdate(accountId);
+        return transactions.run(() -> {
+            Account account = findAccount(accountId);
 
-        if (account.getBalance().compareTo(validAmount) < 0) {
-            throw new InsufficientFundsException(account.getBalance(), validAmount);
-        }
+            if (account.getBalance().compareTo(validAmount) < 0) {
+                throw new InsufficientFundsException(account.getBalance(), validAmount);
+            }
 
-        account.setBalance(account.getBalance().subtract(validAmount));
-        accountRepository.save(account);
-        transactionRepository.save(new Transaction(accountId, TransactionType.WITHDRAW, validAmount));
-        return AccountResponse.from(account, findUser(account.getUserId()));
+            account.setBalance(account.getBalance().subtract(validAmount));
+            accountRepository.save(account);
+            transactionRepository.save(new Transaction(accountId, TransactionType.WITHDRAW, validAmount));
+            return AccountResponse.from(account, findUser(account.getUserId()));
+        });
     }
 
     // ----- Transfer -----
 
     /**
-     * Moves money between two accounts in one database transaction: both balances
-     * change and both history rows are written, or nothing happens at all.
+     * Moves money between two accounts in one transaction: both balances change and
+     * both history documents are written, or nothing happens at all. MongoDB aborts
+     * conflicting transactions instead of making them wait, so deadlocks can't happen.
      */
     public TransferResponse transfer(Long fromAccountId, Long toAccountId, BigDecimal amount) {
         if (fromAccountId.equals(toAccountId)) {
@@ -161,49 +166,47 @@ public class AccountService {
         }
         BigDecimal validAmount = validateAmount(amount);
 
-        // Lock both rows, always the lower ID first. Two transfers running in opposite
-        // directions then lock in the same order, so they can't deadlock each other.
-        long firstId = Math.min(fromAccountId, toAccountId);
-        long secondId = Math.max(fromAccountId, toAccountId);
-        Account first = findAccountForUpdate(firstId);
-        Account second = findAccountForUpdate(secondId);
-        Account from = first.getAccountId().equals(fromAccountId) ? first : second;
-        Account to = (from == first) ? second : first;
+        return transactions.run(() -> {
+            Account from = findAccount(fromAccountId);
+            Account to = findAccount(toAccountId);
 
-        if (from.getBalance().compareTo(validAmount) < 0) {
-            throw new InsufficientFundsException(from.getBalance(), validAmount);
-        }
-        BigDecimal newToBalance = to.getBalance().add(validAmount);
-        if (newToBalance.compareTo(MAX_BALANCE) > 0) {
-            throw new InvalidAmountException("Transfer would exceed the maximum balance of "
-                    + MAX_BALANCE + " in account " + toAccountId);
-        }
+            if (from.getBalance().compareTo(validAmount) < 0) {
+                throw new InsufficientFundsException(from.getBalance(), validAmount);
+            }
+            BigDecimal newToBalance = to.getBalance().add(validAmount);
+            if (newToBalance.compareTo(MAX_BALANCE) > 0) {
+                throw new InvalidAmountException("Transfer would exceed the maximum balance of "
+                        + MAX_BALANCE + " in account " + toAccountId);
+            }
 
-        from.setBalance(from.getBalance().subtract(validAmount));
-        to.setBalance(newToBalance);
-        accountRepository.save(from);
-        accountRepository.save(to);
-        transactionRepository.save(new Transaction(fromAccountId, TransactionType.TRANSFER_OUT, validAmount, toAccountId));
-        transactionRepository.save(new Transaction(toAccountId, TransactionType.TRANSFER_IN, validAmount, fromAccountId));
+            from.setBalance(from.getBalance().subtract(validAmount));
+            to.setBalance(newToBalance);
+            accountRepository.save(from);
+            accountRepository.save(to);
+            transactionRepository.save(new Transaction(fromAccountId, TransactionType.TRANSFER_OUT, validAmount, toAccountId));
+            transactionRepository.save(new Transaction(toAccountId, TransactionType.TRANSFER_IN, validAmount, fromAccountId));
 
-        return new TransferResponse(
-                AccountResponse.from(from, findUser(from.getUserId())),
-                AccountResponse.from(to, findUser(to.getUserId())),
-                validAmount);
+            return new TransferResponse(
+                    AccountResponse.from(from, findUser(from.getUserId())),
+                    AccountResponse.from(to, findUser(to.getUserId())),
+                    validAmount);
+        });
     }
 
     // ----- Delete -----
 
     /** Only empty accounts can be deleted, so money never disappears. Its transactions go with it. */
     public void deleteAccount(Long accountId) {
-        Account account = findAccountForUpdate(accountId);
-        if (account.getBalance().compareTo(BigDecimal.ZERO) != 0) {
-            throw new OperationNotAllowedException("Account " + accountId + " has a balance of "
-                    + account.getBalance() + ". Withdraw the full balance before deleting it.");
-        }
-        // Transactions first: the foreign key won't allow deleting an account they still point to
-        transactionRepository.deleteByAccountId(accountId);
-        accountRepository.delete(account);
+        transactions.run(() -> {
+            Account account = findAccount(accountId);
+            if (account.getBalance().compareTo(BigDecimal.ZERO) != 0) {
+                throw new OperationNotAllowedException("Account " + accountId + " has a balance of "
+                        + account.getBalance() + ". Withdraw the full balance before deleting it.");
+            }
+            transactionRepository.deleteByAccountId(accountId);
+            accountRepository.delete(account);
+            return null;
+        });
     }
 
     // ----- Helpers -----
@@ -224,12 +227,6 @@ public class AccountService {
 
     private Account findAccount(Long accountId) {
         return accountRepository.findById(accountId)
-                .orElseThrow(() -> new ResourceNotFoundException("Account", accountId));
-    }
-
-    /** Same as findAccount, but locks the row until this transaction ends. */
-    private Account findAccountForUpdate(Long accountId) {
-        return accountRepository.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new ResourceNotFoundException("Account", accountId));
     }
 

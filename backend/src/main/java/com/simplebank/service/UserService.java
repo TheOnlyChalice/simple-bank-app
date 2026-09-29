@@ -11,14 +11,12 @@ import com.simplebank.repository.UserRepository;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Every public method runs in a database transaction (@Transactional on the class):
- * either all of its changes are saved, or none are.
+ * Each user operation changes a single document, and single-document writes are
+ * always atomic in MongoDB, so no multi-document transactions are needed here.
  */
 @Service
-@Transactional
 public class UserService {
 
     private final UserRepository userRepository;
@@ -30,20 +28,18 @@ public class UserService {
     }
 
     /** One page of users, oldest first. Pages are numbered from 0. */
-    @Transactional(readOnly = true)
     public PageResponse<UserResponse> getAllUsers(int page, int size) {
         Pageable pageable = Paging.of(page, size, Sort.by("userId"));
         return PageResponse.from(userRepository.findAll(pageable).map(UserResponse::from));
     }
 
-    @Transactional(readOnly = true)
     public UserResponse getUser(Long userId) {
         return UserResponse.from(findUser(userId));
     }
 
     /**
      * The email check gives a clear error in the normal case. If two requests race,
-     * the UNIQUE constraint in the database still rejects the second one.
+     * the unique index on email still rejects the second one.
      */
     public UserResponse createUser(String name, String email) {
         String normalizedEmail = normalizeEmail(email);
