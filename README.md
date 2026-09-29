@@ -2,8 +2,8 @@
 
 A full-stack banking app where users can create accounts, view account details,
 deposit, withdraw, and transfer money, and view paginated transaction history.
-Users and accounts support full CRUD (create, read, update, delete), and one user
-can have many accounts.
+Users and accounts support full CRUD (create, read, update, delete), one user can
+have many accounts, and users and accounts can be searched by address and balance.
 
 Full specification: [docs/Simple_Bank_Application_Project_Document.pdf](docs/Simple_Bank_Application_Project_Document.pdf)
 
@@ -55,7 +55,9 @@ repository interfaces, switching to a database did not change the controllers or
 
 Example documents (MongoDB stores `_id` for the ID, and money as exact `Decimal128`):
 
-    users:         { _id: 1, name: "John Doe", email: "john@example.com", createdAt: ISODate(...) }
+    users:         { _id: 1, name: "John Doe", email: "john@example.com",
+                     address: { street: "100 Main St", city: "Baltimore", state: "MD", zip: "21201" },
+                     createdAt: ISODate(...) }
     accounts:      { _id: 1, userId: 1, balance: NumberDecimal("300.00"), accountType: "SAVINGS", createdAt: ... }
     transactions:  { _id: 2, accountId: 1, txnType: "TRANSFER_OUT", amount: NumberDecimal("200.00"),
                      relatedAccountId: 2, createdAt: ... }
@@ -66,6 +68,8 @@ Example documents (MongoDB stores `_id` for the ID, and money as exact `Decimal1
   save callback (`SequenceIdAssigner`) assigns it with an atomic `$inc`, like `AUTO_INCREMENT`.
 - **Relationships.** `accounts.userId` and `transactions.accountId` reference other documents.
   MongoDB has no foreign keys, so the services check that owners exist.
+- **Addresses** are embedded documents inside each user, since an address always belongs to
+  exactly one user. Users created before addresses were added have none (`"address": null`).
 
 ## Setup
 
@@ -114,7 +118,7 @@ constraints). MongoDB rejects any insert or update that breaks them, even ones t
 
 | Collection | Rules |
 |---|---|
-| `users` | name and email required; email format; max 100 characters; **unique email** (index) |
+| `users` | name, email, and address required; email format; **unique email** (index); address has street, city, a 2-letter uppercase state, and a 5-digit or ZIP+4 zip |
 | `accounts` | balance is a Decimal128 **≥ 0**; type is `SAVINGS` or `CHECKING`; owner required |
 | `transactions` | amount is a Decimal128 **> 0**; valid type; transfers **must** name the other account, deposits and withdrawals **must not** |
 
@@ -139,11 +143,11 @@ before each test.
 
 | Method | Endpoint | Body | Success |
 |--------|----------|------|---------|
-| POST | `/api/users` | `{ "name": "John Doe", "email": "john@example.com" }` | 201 |
-| GET | `/api/users?page=0&size=20` | | 200 |
+| POST | `/api/users` | `{ "name": "John Doe", "email": "john@example.com", "address": { ... } }` | 201 |
+| GET | `/api/users?page=0&size=20` (plus optional filters, below) | | 200 |
 | GET | `/api/users/{id}` | | 200 |
 | GET | `/api/users/{id}/accounts` | | 200 |
-| PUT | `/api/users/{id}` | `{ "name": "John Smith", "email": "john@example.com" }` | 200 |
+| PUT | `/api/users/{id}` | `{ "name": "John Smith", "email": "john@example.com", "address": { ... } }` | 200 |
 | DELETE | `/api/users/{id}` | | 204 |
 
 ### Accounts
@@ -151,7 +155,7 @@ before each test.
 | Method | Endpoint | Body | Success |
 |--------|----------|------|---------|
 | POST | `/api/accounts` | `{ "userId": 1, "accountType": "SAVINGS" }` | 201 |
-| GET | `/api/accounts?page=0&size=20` | | 200 |
+| GET | `/api/accounts?page=0&size=20` (plus optional filters, below) | | 200 |
 | GET | `/api/accounts/{id}` | | 200 |
 | PUT | `/api/accounts/{id}` | `{ "accountType": "CHECKING" }` | 200 |
 | DELETE | `/api/accounts/{id}` | | 204 |
@@ -165,9 +169,52 @@ before each test.
 |--------|----------|------|---------|
 | POST | `/api/transfers` | `{ "fromAccountId": 1, "toAccountId": 2, "amount": 100 }` | 200 |
 
+The address is required when creating or updating a user:
+
+    "address": { "street": "100 Main St", "city": "Baltimore", "state": "MD", "zip": "21201" }
+
+`state` is a 2-letter code (stored uppercase, so `md` becomes `MD`), and `zip` is 5 digits
+or ZIP+4 (`21201-1234`). Errors inside the address are reported per field, e.g.
+`{ "address.zip": "zip must be 5 digits or ZIP+4, e.g. 21201 or 21201-1234" }`.
+
 `accountType` is `SAVINGS` or `CHECKING`. Deposit and withdraw return the updated
 account; a transfer returns both updated accounts. `GET /api/users/{id}/accounts`
 returns a plain list; the other lists are paginated.
+
+### Search and filters
+
+All filters are optional, can be combined, and work together with `page` and `size`.
+
+**Users** (`GET /api/users`):
+
+| Parameter | Meaning |
+|---|---|
+| `state` | 2-letter state code, case-insensitive (`md` finds `MD`) |
+| `city` | Exact city name, case-insensitive |
+| `zip` | Exact ZIP code |
+| `minBalance` | At least this much money (inclusive) |
+| `maxBalance` | At most this much money (inclusive) |
+| `balanceMode` | `TOTAL` (default): the sum of all the user's accounts. `ANY_ACCOUNT`: at least one single account in the range |
+
+    GET /api/users?state=MD&city=Baltimore
+    GET /api/users?zip=21201&minBalance=100
+    GET /api/users?minBalance=100&maxBalance=500&balanceMode=ANY_ACCOUNT
+
+With `TOTAL`, a user with $250 and $20 in two accounts counts as $270; with `ANY_ACCOUNT`,
+each account is checked on its own. Balance filters use a MongoDB **aggregation pipeline**
+that joins each user's accounts (`$lookup`) and, for `TOTAL`, adds them up (`$sum`).
+
+**Accounts** (`GET /api/accounts`):
+
+| Parameter | Meaning |
+|---|---|
+| `minBalance` | Balance of at least this much (inclusive) |
+| `maxBalance` | Balance of at most this much (inclusive) |
+| `accountType` | `SAVINGS` or `CHECKING` |
+
+    GET /api/accounts?minBalance=100&accountType=SAVINGS
+
+`minBalance` above `maxBalance`, an unknown `balanceMode`, or an unknown `accountType` returns a 400.
 
 ### Pagination
 
@@ -231,7 +278,7 @@ Every error returns the same JSON shape:
 
 | Status | When |
 |--------|------|
-| 400 | Validation failure, invalid amount, insufficient funds, transfer to the same account, invalid page or size, malformed JSON |
+| 400 | Validation failure (including the address), invalid amount, insufficient funds, transfer to the same account, invalid page, size, or search filter, malformed JSON |
 | 404 | User or account not found |
 | 409 | Email already registered, deleting an account that has money, deleting a user who has accounts, or a database rule violation |
 | 415 | Request body sent without `Content-Type: application/json` |
@@ -249,9 +296,10 @@ Import `postman/SimpleBank.postman_collection.json`, start the backend, and run 
 whole collection:
 
 - **Happy path** creates, reads, and updates a user and two accounts, deposits,
-  withdraws, transfers between the accounts, and pages through lists and history.
+  withdraws, transfers between the accounts, pages through lists and history, and
+  searches users (by city, state, and both balance modes) and accounts (by balance and type).
 - **Business rules and errors** checks that every rule returns the correct status code.
 - **Cleanup (delete)** empties and deletes the accounts and users that were created.
 
-The collection generates a new email on every run, so it can be run repeatedly
-against the same database.
+The collection generates a new email and a new city on every run, so it can be run
+repeatedly against the same database, and the search checks only see that run's users.

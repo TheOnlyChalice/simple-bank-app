@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Simple Bank API",
-    "description": "Start the backend first (./mvnw spring-boot:run, connected to MongoDB Atlas), then run the whole collection with the Runner, folders in order. 'Happy path' creates, reads and updates users and accounts, moves money (deposit, withdraw, transfer), and pages through lists and history. 'Business rules and errors' checks that every rule returns the right status code. 'Cleanup' empties and deletes everything that was created.",
+    "description": "Start the backend first (./mvnw spring-boot:run, connected to MongoDB Atlas), then run the whole collection with the Runner, folders in order. 'Happy path' creates, reads and updates users and accounts, moves money (deposit, withdraw, transfer), pages through lists and history, and searches users and accounts. 'Business rules and errors' checks that every rule returns the right status code. 'Cleanup' empties and deletes everything that was created. Each run uses a unique city, so the search checks only see that run's users.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -32,6 +32,10 @@
     {
       "key": "email2",
       "value": ""
+    },
+    {
+      "key": "city",
+      "value": ""
     }
   ],
   "item": [
@@ -60,7 +64,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"{{email}}\"\n}",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"{{email}}\",\n  \"address\": { \"street\": \"100 Main St\", \"city\": \"{{city}}\", \"state\": \"MD\", \"zip\": \"21201\" }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -75,7 +79,9 @@
                 "type": "text/javascript",
                 "exec": [
                   "// Unique email each run, so the collection can be run repeatedly",
-                  "pm.collectionVariables.set('email', 'john.' + Date.now() + '@example.com');"
+                  "pm.collectionVariables.set('email', 'john.' + Date.now() + '@example.com');",
+                  "// Unique city each run, so the search checks only find this run's users",
+                  "pm.collectionVariables.set('city', 'Testcity' + Date.now());"
                 ]
               }
             },
@@ -85,7 +91,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status is 201', () => pm.response.to.have.status(201));",
-                  "pm.collectionVariables.set('userId', pm.response.json().userId);"
+                  "pm.collectionVariables.set('userId', pm.response.json().userId);",
+                  "pm.test('Address is returned', () => pm.expect(pm.response.json().address.state).to.eql('MD'));"
                 ]
               }
             }
@@ -184,7 +191,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"John Smith\",\n  \"email\": \"{{email}}\"\n}",
+              "raw": "{\n  \"name\": \"John Smith\",\n  \"email\": \"{{email}}\",\n  \"address\": { \"street\": \"100 Main St\", \"city\": \"{{city}}\", \"state\": \"MD\", \"zip\": \"21201\" }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -722,6 +729,180 @@
               }
             }
           ]
+        },
+        {
+          "name": "Search Users by City and State",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/users?city={{city}}&state=md",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "city",
+                  "value": "{{city}}"
+                },
+                {
+                  "key": "state",
+                  "value": "md"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const page = pm.response.json();",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Finds exactly this run\\'s user', () => pm.expect(page.content.map(u => u.userId)).to.eql([Number(pm.collectionVariables.get('userId'))]));",
+                  "pm.test('State match is case-insensitive', () => pm.expect(page.content[0].address.state).to.eql('MD'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search Users by Total Balance",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/users?city={{city}}&minBalance=300&balanceMode=TOTAL",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "city",
+                  "value": "{{city}}"
+                },
+                {
+                  "key": "minBalance",
+                  "value": "300"
+                },
+                {
+                  "key": "balanceMode",
+                  "value": "TOTAL"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const page = pm.response.json();",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Total of $200 + $100 reaches $300', () => pm.expect(page.content.map(u => u.userId)).to.eql([Number(pm.collectionVariables.get('userId'))]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search Users by Any Single Account",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/users?city={{city}}&minBalance=300&balanceMode=ANY_ACCOUNT",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "city",
+                  "value": "{{city}}"
+                },
+                {
+                  "key": "minBalance",
+                  "value": "300"
+                },
+                {
+                  "key": "balanceMode",
+                  "value": "ANY_ACCOUNT"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const page = pm.response.json();",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('No single account reaches $300', () => pm.expect(page.content).to.be.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search Accounts by Balance and Type",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts?accountType=SAVINGS&minBalance=100&maxBalance=100&size=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ],
+              "query": [
+                {
+                  "key": "accountType",
+                  "value": "SAVINGS"
+                },
+                {
+                  "key": "minBalance",
+                  "value": "100"
+                },
+                {
+                  "key": "maxBalance",
+                  "value": "100"
+                },
+                {
+                  "key": "size",
+                  "value": "100"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ids = pm.response.json().content.map(a => a.accountId);",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Includes the $100 SAVINGS account', () => pm.expect(ids).to.include(Number(pm.collectionVariables.get('accountId2'))));",
+                  "pm.test('Excludes the $200 account', () => pm.expect(ids).to.not.include(Number(pm.collectionVariables.get('accountId'))));"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -972,7 +1153,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"\",\n  \"email\": \"not-an-email\"\n}",
+              "raw": "{\n  \"name\": \"\",\n  \"email\": \"not-an-email\",\n  \"address\": { \"street\": \"100 Main St\", \"city\": \"Baltimore\", \"state\": \"MD\", \"zip\": \"21201\" }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -988,6 +1169,93 @@
                 "exec": [
                   "pm.test('Status is 400', () => pm.response.to.have.status(400));",
                   "pm.test('Reports name and email', () => pm.expect(pm.response.json().fieldErrors).to.have.all.keys('name', 'email'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create user with invalid address (400)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bad Address\",\n  \"email\": \"bad.address@example.com\",\n  \"address\": { \"street\": \"1 Oak Ave\", \"city\": \"Towson\", \"state\": \"Maryland\", \"zip\": \"123\" }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const errors = pm.response.json().fieldErrors;",
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Reports the state and zip', () => pm.expect(errors).to.have.all.keys('address.state', 'address.zip'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create user without address (400)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"No Address\",\n  \"email\": \"no.address@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Reports the missing address', () => pm.expect(pm.response.json().fieldErrors).to.have.property('address'));"
                 ]
               }
             }
@@ -1015,7 +1283,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"John Again\",\n  \"email\": \"{{email}}\"\n}",
+              "raw": "{\n  \"name\": \"John Again\",\n  \"email\": \"{{email}}\",\n  \"address\": { \"street\": \"100 Main St\", \"city\": \"Baltimore\", \"state\": \"MD\", \"zip\": \"21201\" }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1057,7 +1325,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"{{email2}}\"\n}",
+              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"{{email2}}\",\n  \"address\": { \"street\": \"100 Main St\", \"city\": \"Baltimore\", \"state\": \"MD\", \"zip\": \"21201\" }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1110,7 +1378,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"John Smith\",\n  \"email\": \"{{email2}}\"\n}",
+              "raw": "{\n  \"name\": \"John Smith\",\n  \"email\": \"{{email2}}\",\n  \"address\": { \"street\": \"100 Main St\", \"city\": \"Baltimore\", \"state\": \"MD\", \"zip\": \"21201\" }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1153,7 +1421,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"\",\n  \"email\": \"not-an-email\"\n}",
+              "raw": "{\n  \"name\": \"\",\n  \"email\": \"not-an-email\",\n  \"address\": { \"street\": \"100 Main St\", \"city\": \"Baltimore\", \"state\": \"MD\", \"zip\": \"21201\" }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1196,7 +1464,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Nobody\",\n  \"email\": \"nobody@example.com\"\n}",
+              "raw": "{\n  \"name\": \"Nobody\",\n  \"email\": \"nobody@example.com\",\n  \"address\": { \"street\": \"100 Main St\", \"city\": \"Baltimore\", \"state\": \"MD\", \"zip\": \"21201\" }\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1599,6 +1867,113 @@
                 "exec": [
                   "pm.test('Status is 400', () => pm.response.to.have.status(400));",
                   "pm.test('Explains the size limit', () => pm.expect(pm.response.json().message).to.include('size'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search with minBalance above maxBalance (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/users?minBalance=500&maxBalance=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "minBalance",
+                  "value": "500"
+                },
+                {
+                  "key": "maxBalance",
+                  "value": "100"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search with unknown balanceMode (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/users?minBalance=1&balanceMode=SOMETIMES",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "minBalance",
+                  "value": "1"
+                },
+                {
+                  "key": "balanceMode",
+                  "value": "SOMETIMES"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search accounts with unknown type (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts?accountType=GOLD",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts"
+              ],
+              "query": [
+                {
+                  "key": "accountType",
+                  "value": "GOLD"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
                 ]
               }
             }
