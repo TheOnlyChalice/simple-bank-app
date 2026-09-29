@@ -32,4 +32,9 @@ public class InMemoryTransactionRepository implements TransactionRepository {
                 .sorted(Comparator.comparing(Transaction::getTxnId).reversed())
                 .toList();
     }
+
+    @Override
+    public void deleteByAccountId(Long accountId) {
+        transactions.values().removeIf(txn -> txn.getAccountId().equals(accountId));
+    }
 }

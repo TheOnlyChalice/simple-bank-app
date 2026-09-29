@@ -4,6 +4,8 @@ import com.simplebank.model.User;
 import com.simplebank.repository.UserRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,8 +33,26 @@ public class InMemoryUserRepository implements UserRepository {
     }
 
     @Override
-    public boolean existsByEmail(String email) {
+    public Optional<User> findByEmail(String email) {
         return users.values().stream()
-                .anyMatch(user -> user.getEmail().equalsIgnoreCase(email));
+                .filter(user -> user.getEmail().equalsIgnoreCase(email))
+                .findFirst();
+    }
+
+    @Override
+    public List<User> findAll() {
+        return users.values().stream()
+                .sorted(Comparator.comparing(User::getUserId))
+                .toList();
+    }
+
+    @Override
+    public boolean existsByEmail(String email) {
+        return findByEmail(email).isPresent();
+    }
+
+    @Override
+    public void deleteById(Long userId) {
+        users.remove(userId);
     }
 }

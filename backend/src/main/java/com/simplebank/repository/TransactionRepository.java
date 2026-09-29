@@ -10,4 +10,6 @@ public interface TransactionRepository {
 
     /** Newest first. IDs only ever increase, so ordering by ID is ordering by time. */
     List<Transaction> findByAccountIdOrderByTxnIdDesc(Long accountId);
+
+    void deleteByAccountId(Long accountId);
 }

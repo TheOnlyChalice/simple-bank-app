@@ -2,7 +2,13 @@ package com.simplebank.service;
 
 import com.simplebank.dto.UserResponse;
 import com.simplebank.exception.DuplicateEmailException;
+import com.simplebank.exception.OperationNotAllowedException;
 import com.simplebank.exception.ResourceNotFoundException;
+import com.simplebank.model.AccountType;
+import com.simplebank.repository.AccountRepository;
+import com.simplebank.repository.UserRepository;
+import com.simplebank.repository.inmemory.InMemoryAccountRepository;
+import com.simplebank.repository.inmemory.InMemoryTransactionRepository;
 import com.simplebank.repository.inmemory.InMemoryUserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,11 +19,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class UserServiceTest {
 
     private UserService userService;
+    private AccountService accountService;
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(new InMemoryUserRepository());
+        UserRepository userRepository = new InMemoryUserRepository();
+        AccountRepository accountRepository = new InMemoryAccountRepository();
+        userService = new UserService(userRepository, accountRepository);
+        accountService = new AccountService(accountRepository, userRepository, new InMemoryTransactionRepository());
     }
+
+    // ----- Create / Read -----
 
     @Test
     void createUserNormalizesEmail() {
@@ -37,6 +49,81 @@ class UserServiceTest {
     @Test
     void unknownUserThrowsNotFound() {
         assertThatThrownBy(() -> userService.getUser(42L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getAllUsersReturnsEveryUserInIdOrder() {
+        userService.createUser("Jane", "jane@example.com");
+        userService.createUser("John", "john@example.com");
+
+        assertThat(userService.getAllUsers())
+                .extracting(UserResponse::name)
+                .containsExactly("Jane", "John");
+    }
+
+    // ----- Update -----
+
+    @Test
+    void updateUserChangesNameAndEmail() {
+        Long id = userService.createUser("Jane", "jane@example.com").userId();
+
+        UserResponse updated = userService.updateUser(id, "Jane Smith", "Jane.Smith@Example.com");
+
+        assertThat(updated.name()).isEqualTo("Jane Smith");
+        assertThat(updated.email()).isEqualTo("jane.smith@example.com");
+        assertThat(userService.getUser(id).name()).isEqualTo("Jane Smith");
+    }
+
+    @Test
+    void updateUserCanKeepTheirOwnEmail() {
+        Long id = userService.createUser("Jane", "jane@example.com").userId();
+        UserResponse updated = userService.updateUser(id, "Jane Smith", "jane@example.com");
+        assertThat(updated.name()).isEqualTo("Jane Smith");
+    }
+
+    @Test
+    void updateUserCannotTakeAnotherUsersEmail() {
+        userService.createUser("Jane", "jane@example.com");
+        Long johnId = userService.createUser("John", "john@example.com").userId();
+
+        assertThatThrownBy(() -> userService.updateUser(johnId, "John", "jane@example.com"))
+                .isInstanceOf(DuplicateEmailException.class);
+        assertThat(userService.getUser(johnId).email()).isEqualTo("john@example.com");
+    }
+
+    @Test
+    void updateUnknownUserThrowsNotFound() {
+        assertThatThrownBy(() -> userService.updateUser(42L, "Nobody", "nobody@example.com"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // ----- Delete -----
+
+    @Test
+    void deleteUserWithoutAccounts() {
+        Long id = userService.createUser("Jane", "jane@example.com").userId();
+
+        userService.deleteUser(id);
+
+        assertThatThrownBy(() -> userService.getUser(id))
+                .isInstanceOf(ResourceNotFoundException.class);
+        assertThat(userService.getAllUsers()).isEmpty();
+    }
+
+    @Test
+    void cannotDeleteUserWhoStillHasAccounts() {
+        Long id = userService.createUser("Jane", "jane@example.com").userId();
+        accountService.createAccount(id, AccountType.SAVINGS);
+
+        assertThatThrownBy(() -> userService.deleteUser(id))
+                .isInstanceOf(OperationNotAllowedException.class);
+        assertThat(userService.getUser(id).name()).isEqualTo("Jane");
+    }
+
+    @Test
+    void deleteUnknownUserThrowsNotFound() {
+        assertThatThrownBy(() -> userService.deleteUser(42L))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 }

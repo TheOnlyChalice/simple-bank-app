@@ -4,6 +4,7 @@ import com.simplebank.dto.AccountResponse;
 import com.simplebank.dto.TransactionResponse;
 import com.simplebank.exception.InsufficientFundsException;
 import com.simplebank.exception.InvalidAmountException;
+import com.simplebank.exception.OperationNotAllowedException;
 import com.simplebank.exception.ResourceNotFoundException;
 import com.simplebank.model.Account;
 import com.simplebank.model.AccountType;
@@ -23,6 +24,7 @@ import java.util.List;
  *   1. Cannot withdraw more than the balance
  *   2. Deposit (and withdraw) amounts must be positive
  *   3. Every deposit/withdrawal is recorded as a transaction
+ * Plus: the balance can't be edited directly, and only empty accounts can be deleted.
  */
 @Service
 public class AccountService {
@@ -42,14 +44,49 @@ public class AccountService {
         this.transactionRepository = transactionRepository;
     }
 
+    // ----- Create -----
+
     public AccountResponse createAccount(Long userId, AccountType accountType) {
         User user = findUser(userId);
         Account account = accountRepository.save(new Account(userId, accountType));
         return AccountResponse.from(account, user);
     }
 
+    // ----- Read -----
+
+    public List<AccountResponse> getAllAccounts() {
+        return accountRepository.findAll().stream()
+                .map(account -> AccountResponse.from(account, findUser(account.getUserId())))
+                .toList();
+    }
+
     public AccountResponse getAccount(Long accountId) {
         Account account = findAccount(accountId);
+        return AccountResponse.from(account, findUser(account.getUserId()));
+    }
+
+    /** One user -> many accounts. 404 if the user doesn't exist. */
+    public List<AccountResponse> getAccountsForUser(Long userId) {
+        User user = findUser(userId);
+        return accountRepository.findByUserId(userId).stream()
+                .map(account -> AccountResponse.from(account, user))
+                .toList();
+    }
+
+    public List<TransactionResponse> getTransactions(Long accountId) {
+        findAccount(accountId); // 404 for unknown accounts instead of an empty list
+        return transactionRepository.findByAccountIdOrderByTxnIdDesc(accountId).stream()
+                .map(TransactionResponse::from)
+                .toList();
+    }
+
+    // ----- Update -----
+
+    /** Only the account type can be changed. Money only moves through deposit/withdraw. */
+    public AccountResponse updateAccount(Long accountId, AccountType accountType) {
+        Account account = findAccount(accountId);
+        account.setAccountType(accountType);
+        accountRepository.save(account);
         return AccountResponse.from(account, findUser(account.getUserId()));
     }
 
@@ -87,12 +124,20 @@ public class AccountService {
         return AccountResponse.from(account, findUser(account.getUserId()));
     }
 
-    public List<TransactionResponse> getTransactions(Long accountId) {
-        findAccount(accountId); // 404 for unknown accounts instead of an empty list
-        return transactionRepository.findByAccountIdOrderByTxnIdDesc(accountId).stream()
-                .map(TransactionResponse::from)
-                .toList();
+    // ----- Delete -----
+
+    /** Only empty accounts can be deleted, so money never disappears. Its transactions go with it. */
+    public synchronized void deleteAccount(Long accountId) {
+        Account account = findAccount(accountId);
+        if (account.getBalance().compareTo(BigDecimal.ZERO) != 0) {
+            throw new OperationNotAllowedException("Account " + accountId + " has a balance of "
+                    + account.getBalance() + ". Withdraw the full balance before deleting it.");
+        }
+        transactionRepository.deleteByAccountId(accountId);
+        accountRepository.deleteById(accountId);
     }
+
+    // ----- Helpers -----
 
     /** Returns the amount with exactly 2 decimal places, or throws if it breaks a rule. */
     private BigDecimal validateAmount(BigDecimal amount) {
