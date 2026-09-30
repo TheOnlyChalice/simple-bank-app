@@ -6,6 +6,7 @@ import com.simplebank.exception.DuplicateEmailException;
 import com.simplebank.exception.OperationNotAllowedException;
 import com.simplebank.exception.ResourceNotFoundException;
 import com.simplebank.model.Address;
+import com.simplebank.model.AuditAction;
 import com.simplebank.model.User;
 import com.simplebank.repository.AccountRepository;
 import com.simplebank.repository.UserFilter;
@@ -14,19 +15,30 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
 /**
- * Each user operation changes a single document, and single-document writes are
- * always atomic in MongoDB, so no multi-document transactions are needed here.
+ * User operations. Each change runs in a MongoDB transaction together with its audit
+ * event, so a change is never saved without its record in the audit log.
  */
 @Service
 public class UserService {
 
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
+    private final MongoTransactions transactions;
+    private final AuditService auditService;
 
-    public UserService(UserRepository userRepository, AccountRepository accountRepository) {
+    public UserService(UserRepository userRepository,
+                       AccountRepository accountRepository,
+                       MongoTransactions transactions,
+                       AuditService auditService) {
         this.userRepository = userRepository;
         this.accountRepository = accountRepository;
+        this.transactions = transactions;
+        this.auditService = auditService;
     }
 
     /** One page of all users, oldest first. Pages are numbered from 0. */
@@ -51,39 +63,69 @@ public class UserService {
      */
     public UserResponse createUser(String name, String email, Address address) {
         String normalizedEmail = normalizeEmail(email);
-        if (userRepository.existsByEmail(normalizedEmail)) {
-            throw new DuplicateEmailException(normalizedEmail);
-        }
-        User user = userRepository.save(new User(name.trim(), normalizedEmail, normalizeAddress(address)));
-        return UserResponse.from(user);
+        AuditDetails audit = AuditDetails.none().withDetails("email " + normalizedEmail);
+        return auditService.recordFailures(AuditAction.USER_CREATED, audit, () -> transactions.run(() -> {
+            if (userRepository.existsByEmail(normalizedEmail)) {
+                throw new DuplicateEmailException(normalizedEmail);
+            }
+            User user = userRepository.save(new User(name.trim(), normalizedEmail, normalizeAddress(address)));
+            auditService.recordSuccess(AuditAction.USER_CREATED, audit.withUserId(user.getUserId()), List.of());
+            return UserResponse.from(user);
+        }));
     }
 
     public UserResponse updateUser(Long userId, String name, String email, Address address) {
-        User user = findUser(userId);
-        String normalizedEmail = normalizeEmail(email);
+        AuditDetails audit = AuditDetails.forUser(userId);
+        return auditService.recordFailures(AuditAction.USER_UPDATED, audit, () -> transactions.run(() -> {
+            User user = findUser(userId);
+            String newName = name.trim();
+            String normalizedEmail = normalizeEmail(email);
+            Address newAddress = normalizeAddress(address);
 
-        // Keeping your own email is fine; taking someone else's is not
-        boolean takenByAnotherUser = userRepository.findByEmail(normalizedEmail)
-                .filter(other -> !other.getUserId().equals(userId))
-                .isPresent();
-        if (takenByAnotherUser) {
-            throw new DuplicateEmailException(normalizedEmail);
-        }
+            // Keeping your own email is fine; taking someone else's is not
+            boolean takenByAnotherUser = userRepository.findByEmail(normalizedEmail)
+                    .filter(other -> !other.getUserId().equals(userId))
+                    .isPresent();
+            if (takenByAnotherUser) {
+                throw new DuplicateEmailException(normalizedEmail);
+            }
 
-        user.setName(name.trim());
-        user.setEmail(normalizedEmail);
-        user.setAddress(normalizeAddress(address));
-        return UserResponse.from(userRepository.save(user));
+            // Record which fields actually changed
+            List<String> changed = new ArrayList<>();
+            if (!user.getName().equals(newName)) {
+                changed.add("name");
+            }
+            if (!user.getEmail().equals(normalizedEmail)) {
+                changed.add("email");
+            }
+            if (!Objects.equals(user.getAddress(), newAddress)) {
+                changed.add("address");
+            }
+
+            user.setName(newName);
+            user.setEmail(normalizedEmail);
+            user.setAddress(newAddress);
+            User saved = userRepository.save(user);
+            auditService.recordSuccess(AuditAction.USER_UPDATED, audit.withDetails(
+                    changed.isEmpty() ? "No changes" : "Changed: " + String.join(", ", changed)), List.of());
+            return UserResponse.from(saved);
+        }));
     }
 
     /** A user can only be deleted once all of their accounts are gone. */
     public void deleteUser(Long userId) {
-        User user = findUser(userId);
-        if (accountRepository.existsByUserId(userId)) {
-            throw new OperationNotAllowedException(
-                    "User " + userId + " still has accounts. Delete their accounts first.");
-        }
-        userRepository.delete(user);
+        AuditDetails audit = AuditDetails.forUser(userId);
+        auditService.recordFailures(AuditAction.USER_DELETED, audit, () -> transactions.run(() -> {
+            User user = findUser(userId);
+            if (accountRepository.existsByUserId(userId)) {
+                throw new OperationNotAllowedException(
+                        "User " + userId + " still has accounts. Delete their accounts first.");
+            }
+            userRepository.delete(user);
+            auditService.recordSuccess(AuditAction.USER_DELETED,
+                    audit.withDetails("email " + user.getEmail()), List.of());
+            return null;
+        }));
     }
 
     private User findUser(Long userId) {

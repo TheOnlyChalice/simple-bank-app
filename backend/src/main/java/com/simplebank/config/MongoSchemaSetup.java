@@ -88,6 +88,35 @@ public class MongoSchemaSetup implements ApplicationRunner {
             }
             """;
 
+    /** Append-only audit trail. Anything that isn't a success must say why (reason). */
+    static final String AUDIT_SCHEMA = """
+            {
+              "bsonType": "object",
+              "required": ["_id", "referenceId", "timestamp", "actor", "action", "outcome"],
+              "properties": {
+                "_id":              { "bsonType": "long" },
+                "referenceId":      { "bsonType": "string", "minLength": 1 },
+                "timestamp":        { "bsonType": "date" },
+                "actor":            { "bsonType": "string", "minLength": 1 },
+                "action":           { "enum": ["USER_CREATED", "USER_UPDATED", "USER_DELETED",
+                                               "ACCOUNT_CREATED", "ACCOUNT_UPDATED", "ACCOUNT_DELETED",
+                                               "DEPOSIT", "WITHDRAW", "TRANSFER"] },
+                "outcome":          { "enum": ["SUCCESS", "REJECTED", "FAILED"] },
+                "reason":           { "bsonType": "string" },
+                "userId":           { "bsonType": "long" },
+                "accountId":        { "bsonType": "long" },
+                "relatedAccountId": { "bsonType": "long" },
+                "amount":           { "bsonType": "decimal" },
+                "transactionIds":   { "bsonType": "array", "items": { "bsonType": "long" } },
+                "details":          { "bsonType": "string" }
+              },
+              "anyOf": [
+                { "properties": { "outcome": { "enum": ["SUCCESS"] } } },
+                { "required": ["reason"] }
+              ]
+            }
+            """;
+
     private final MongoTemplate mongoTemplate;
 
     public MongoSchemaSetup(MongoTemplate mongoTemplate) {
@@ -99,6 +128,7 @@ public class MongoSchemaSetup implements ApplicationRunner {
         applyRules("users", USERS_SCHEMA);
         applyRules("accounts", ACCOUNTS_SCHEMA);
         applyRules("transactions", TRANSACTIONS_SCHEMA);
+        applyRules("audit_log", AUDIT_SCHEMA);
     }
 
     private void applyRules(String collection, String schemaJson) {

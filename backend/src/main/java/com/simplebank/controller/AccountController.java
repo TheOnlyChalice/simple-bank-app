@@ -25,7 +25,8 @@ import java.math.BigDecimal;
 import java.net.URI;
 
 /**
- * CRUD and search for accounts, plus deposit, withdraw, and transaction history (section 5.4).
+ * CRUD and search for accounts, plus premium accounts, deposit, withdraw, and
+ * transaction history (section 5.4).
  * Controllers only deal with HTTP: read the request, call the service, return the result.
  */
 @RestController
@@ -59,6 +60,18 @@ public class AccountController {
             @RequestParam(defaultValue = "20") int size) {
         AccountFilter filter = new AccountFilter(minBalance, maxBalance, accountType);
         return accountService.getAllAccounts(filter, page, size);
+    }
+
+    /**
+     * Premium accounts: balance at or above the threshold, richest first, e.g.
+     * /api/accounts/premium?threshold=1000
+     */
+    @GetMapping("/premium")
+    public PageResponse<AccountResponse> getPremiumAccounts(
+            @RequestParam BigDecimal threshold,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return accountService.getPremiumAccounts(threshold, page, size);
     }
 
     @GetMapping("/{id}")

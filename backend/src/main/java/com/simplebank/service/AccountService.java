@@ -11,6 +11,7 @@ import com.simplebank.exception.OperationNotAllowedException;
 import com.simplebank.exception.ResourceNotFoundException;
 import com.simplebank.model.Account;
 import com.simplebank.model.AccountType;
+import com.simplebank.model.AuditAction;
 import com.simplebank.model.Transaction;
 import com.simplebank.model.TransactionType;
 import com.simplebank.model.User;
@@ -41,6 +42,9 @@ import java.util.stream.Collectors;
  * Every method that changes an account runs in a MongoDB transaction (transactions.run).
  * If two requests change the same account at once, MongoDB aborts one with a write
  * conflict, and it is retried with fresh data, so no update is ever lost.
+ *
+ * Every change is audited: successes inside the same transaction, and rejected or
+ * failed attempts after it rolls back (see AuditService).
  */
 @Service
 public class AccountService {
@@ -52,23 +56,31 @@ public class AccountService {
     private final UserRepository userRepository;
     private final TransactionRepository transactionRepository;
     private final MongoTransactions transactions;
+    private final AuditService auditService;
 
     public AccountService(AccountRepository accountRepository,
                           UserRepository userRepository,
                           TransactionRepository transactionRepository,
-                          MongoTransactions transactions) {
+                          MongoTransactions transactions,
+                          AuditService auditService) {
         this.accountRepository = accountRepository;
         this.userRepository = userRepository;
         this.transactionRepository = transactionRepository;
         this.transactions = transactions;
+        this.auditService = auditService;
     }
 
     // ----- Create -----
 
     public AccountResponse createAccount(Long userId, AccountType accountType) {
-        User user = findUser(userId);
-        Account account = accountRepository.save(new Account(userId, accountType));
-        return AccountResponse.from(account, user);
+        AuditDetails audit = AuditDetails.forUser(userId).withDetails("accountType " + accountType);
+        return auditService.recordFailures(AuditAction.ACCOUNT_CREATED, audit, () -> transactions.run(() -> {
+            User user = findUser(userId);
+            Account account = accountRepository.save(new Account(userId, accountType));
+            auditService.recordSuccess(AuditAction.ACCOUNT_CREATED,
+                    audit.withAccountId(account.getAccountId()), List.of());
+            return AccountResponse.from(account, user);
+        }));
     }
 
     // ----- Read -----
@@ -82,16 +94,20 @@ public class AccountService {
     public PageResponse<AccountResponse> getAllAccounts(AccountFilter filter, int page, int size) {
         Pageable pageable = Paging.of(page, size, Sort.by("accountId"));
         SearchRules.checkBalanceRange(filter.minBalance(), filter.maxBalance());
-        Page<Account> accounts = accountRepository.search(filter, pageable);
+        return toResponses(accountRepository.search(filter, pageable));
+    }
 
-        // Load the owners of this page's accounts in one query, instead of one query
-        // per account (avoids the "N+1 query" problem)
-        Set<Long> userIds = accounts.stream().map(Account::getUserId).collect(Collectors.toSet());
-        Map<Long, User> usersById = userRepository.findAllById(userIds).stream()
-                .collect(Collectors.toMap(User::getUserId, Function.identity()));
-
-        return PageResponse.from(
-                accounts.map(account -> AccountResponse.from(account, usersById.get(account.getUserId()))));
+    /**
+     * Premium accounts: every account whose balance is at or above the threshold,
+     * richest first (accounts with equal balances, oldest first).
+     */
+    public PageResponse<AccountResponse> getPremiumAccounts(BigDecimal threshold, int page, int size) {
+        if (threshold == null || threshold.signum() <= 0) {
+            throw new InvalidRequestException("threshold must be greater than zero");
+        }
+        Pageable pageable = Paging.of(page, size,
+                Sort.by(Sort.Direction.DESC, "balance").and(Sort.by("accountId")));
+        return toResponses(accountRepository.search(new AccountFilter(threshold, null, null), pageable));
     }
 
     public AccountResponse getAccount(Long accountId) {
@@ -119,92 +135,134 @@ public class AccountService {
 
     /** Only the account type can be changed. Money only moves through deposit, withdraw, and transfer. */
     public AccountResponse updateAccount(Long accountId, AccountType accountType) {
-        return transactions.run(() -> {
+        AuditDetails audit = AuditDetails.forAccount(accountId);
+        return auditService.recordFailures(AuditAction.ACCOUNT_UPDATED, audit, () -> transactions.run(() -> {
             Account account = findAccount(accountId);
+            AccountType oldType = account.getAccountType();
             account.setAccountType(accountType);
             accountRepository.save(account);
+            auditService.recordSuccess(AuditAction.ACCOUNT_UPDATED, audit
+                    .withUserId(account.getUserId())
+                    .withDetails("accountType " + oldType + " -> " + accountType), List.of());
             return AccountResponse.from(account, findUser(account.getUserId()));
-        });
+        }));
     }
 
     public AccountResponse deposit(Long accountId, BigDecimal amount) {
-        BigDecimal validAmount = validateAmount(amount);
-        return transactions.run(() -> {
-            Account account = findAccount(accountId);
+        AuditDetails audit = AuditDetails.forAccount(accountId).withAmount(amount);
+        return auditService.recordFailures(AuditAction.DEPOSIT, audit, () -> {
+            BigDecimal validAmount = validateAmount(amount);
+            return transactions.run(() -> {
+                Account account = findAccount(accountId);
+                BigDecimal oldBalance = account.getBalance();
 
-            BigDecimal newBalance = account.getBalance().add(validAmount);
-            if (newBalance.compareTo(MAX_BALANCE) > 0) {
-                throw new InvalidAmountException("Deposit would exceed the maximum balance of " + MAX_BALANCE);
-            }
+                BigDecimal newBalance = oldBalance.add(validAmount);
+                if (newBalance.compareTo(MAX_BALANCE) > 0) {
+                    throw new InvalidAmountException("Deposit would exceed the maximum balance of " + MAX_BALANCE);
+                }
 
-            account.setBalance(newBalance);
-            accountRepository.save(account);
-            transactionRepository.save(new Transaction(accountId, TransactionType.DEPOSIT, validAmount));
-            return AccountResponse.from(account, findUser(account.getUserId()));
+                account.setBalance(newBalance);
+                accountRepository.save(account);
+                Transaction txn = transactionRepository.save(
+                        new Transaction(accountId, TransactionType.DEPOSIT, validAmount));
+                auditService.recordSuccess(AuditAction.DEPOSIT, audit
+                        .withUserId(account.getUserId())
+                        .withAmount(validAmount)
+                        .withDetails("balance " + oldBalance + " -> " + newBalance), List.of(txn.getTxnId()));
+                return AccountResponse.from(account, findUser(account.getUserId()));
+            });
         });
     }
 
     public AccountResponse withdraw(Long accountId, BigDecimal amount) {
-        BigDecimal validAmount = validateAmount(amount);
-        return transactions.run(() -> {
-            Account account = findAccount(accountId);
+        AuditDetails audit = AuditDetails.forAccount(accountId).withAmount(amount);
+        return auditService.recordFailures(AuditAction.WITHDRAW, audit, () -> {
+            BigDecimal validAmount = validateAmount(amount);
+            return transactions.run(() -> {
+                Account account = findAccount(accountId);
+                BigDecimal oldBalance = account.getBalance();
 
-            if (account.getBalance().compareTo(validAmount) < 0) {
-                throw new InsufficientFundsException(account.getBalance(), validAmount);
-            }
+                if (oldBalance.compareTo(validAmount) < 0) {
+                    throw new InsufficientFundsException(oldBalance, validAmount);
+                }
 
-            account.setBalance(account.getBalance().subtract(validAmount));
-            accountRepository.save(account);
-            transactionRepository.save(new Transaction(accountId, TransactionType.WITHDRAW, validAmount));
-            return AccountResponse.from(account, findUser(account.getUserId()));
+                BigDecimal newBalance = oldBalance.subtract(validAmount);
+                account.setBalance(newBalance);
+                accountRepository.save(account);
+                Transaction txn = transactionRepository.save(
+                        new Transaction(accountId, TransactionType.WITHDRAW, validAmount));
+                auditService.recordSuccess(AuditAction.WITHDRAW, audit
+                        .withUserId(account.getUserId())
+                        .withAmount(validAmount)
+                        .withDetails("balance " + oldBalance + " -> " + newBalance), List.of(txn.getTxnId()));
+                return AccountResponse.from(account, findUser(account.getUserId()));
+            });
         });
     }
 
     // ----- Transfer -----
 
     /**
-     * Moves money between two accounts in one transaction: both balances change and
-     * both history documents are written, or nothing happens at all. MongoDB aborts
-     * conflicting transactions instead of making them wait, so deadlocks can't happen.
+     * Moves money between two accounts in one transaction: both balances change, both
+     * history documents and the audit event are written, or nothing happens at all.
+     * MongoDB aborts conflicting transactions instead of making them wait, so deadlocks can't happen.
      */
     public TransferResponse transfer(Long fromAccountId, Long toAccountId, BigDecimal amount) {
-        if (fromAccountId.equals(toAccountId)) {
-            throw new InvalidRequestException("Cannot transfer to the same account");
-        }
-        BigDecimal validAmount = validateAmount(amount);
-
-        return transactions.run(() -> {
-            Account from = findAccount(fromAccountId);
-            Account to = findAccount(toAccountId);
-
-            if (from.getBalance().compareTo(validAmount) < 0) {
-                throw new InsufficientFundsException(from.getBalance(), validAmount);
+        AuditDetails audit = AuditDetails.forTransfer(fromAccountId, toAccountId, amount);
+        return auditService.recordFailures(AuditAction.TRANSFER, audit, () -> {
+            if (fromAccountId.equals(toAccountId)) {
+                throw new InvalidRequestException("Cannot transfer to the same account");
             }
-            BigDecimal newToBalance = to.getBalance().add(validAmount);
-            if (newToBalance.compareTo(MAX_BALANCE) > 0) {
-                throw new InvalidAmountException("Transfer would exceed the maximum balance of "
-                        + MAX_BALANCE + " in account " + toAccountId);
-            }
+            BigDecimal validAmount = validateAmount(amount);
 
-            from.setBalance(from.getBalance().subtract(validAmount));
-            to.setBalance(newToBalance);
-            accountRepository.save(from);
-            accountRepository.save(to);
-            transactionRepository.save(new Transaction(fromAccountId, TransactionType.TRANSFER_OUT, validAmount, toAccountId));
-            transactionRepository.save(new Transaction(toAccountId, TransactionType.TRANSFER_IN, validAmount, fromAccountId));
+            return transactions.run(() -> {
+                Account from = findAccount(fromAccountId);
+                Account to = findAccount(toAccountId);
+                BigDecimal fromOldBalance = from.getBalance();
+                BigDecimal toOldBalance = to.getBalance();
 
-            return new TransferResponse(
-                    AccountResponse.from(from, findUser(from.getUserId())),
-                    AccountResponse.from(to, findUser(to.getUserId())),
-                    validAmount);
+                if (fromOldBalance.compareTo(validAmount) < 0) {
+                    throw new InsufficientFundsException(fromOldBalance, validAmount);
+                }
+                BigDecimal newToBalance = toOldBalance.add(validAmount);
+                if (newToBalance.compareTo(MAX_BALANCE) > 0) {
+                    throw new InvalidAmountException("Transfer would exceed the maximum balance of "
+                            + MAX_BALANCE + " in account " + toAccountId);
+                }
+
+                from.setBalance(fromOldBalance.subtract(validAmount));
+                to.setBalance(newToBalance);
+                accountRepository.save(from);
+                accountRepository.save(to);
+                Transaction out = transactionRepository.save(
+                        new Transaction(fromAccountId, TransactionType.TRANSFER_OUT, validAmount, toAccountId));
+                Transaction in = transactionRepository.save(
+                        new Transaction(toAccountId, TransactionType.TRANSFER_IN, validAmount, fromAccountId));
+
+                auditService.recordSuccess(AuditAction.TRANSFER, audit
+                        .withUserId(from.getUserId())
+                        .withAmount(validAmount)
+                        .withDetails("from balance " + fromOldBalance + " -> " + from.getBalance()
+                                + "; to balance " + toOldBalance + " -> " + to.getBalance()),
+                        List.of(out.getTxnId(), in.getTxnId()));
+
+                return new TransferResponse(
+                        AccountResponse.from(from, findUser(from.getUserId())),
+                        AccountResponse.from(to, findUser(to.getUserId())),
+                        validAmount);
+            });
         });
     }
 
     // ----- Delete -----
 
-    /** Only empty accounts can be deleted, so money never disappears. Its transactions go with it. */
+    /**
+     * Only empty accounts can be deleted, so money never disappears. Its transaction
+     * history goes with it, but the audit log keeps a permanent record of everything.
+     */
     public void deleteAccount(Long accountId) {
-        transactions.run(() -> {
+        AuditDetails audit = AuditDetails.forAccount(accountId);
+        auditService.recordFailures(AuditAction.ACCOUNT_DELETED, audit, () -> transactions.run(() -> {
             Account account = findAccount(accountId);
             if (account.getBalance().compareTo(BigDecimal.ZERO) != 0) {
                 throw new OperationNotAllowedException("Account " + accountId + " has a balance of "
@@ -212,11 +270,23 @@ public class AccountService {
             }
             transactionRepository.deleteByAccountId(accountId);
             accountRepository.delete(account);
+            auditService.recordSuccess(AuditAction.ACCOUNT_DELETED, audit
+                    .withUserId(account.getUserId())
+                    .withDetails("accountType " + account.getAccountType()), List.of());
             return null;
-        });
+        }));
     }
 
     // ----- Helpers -----
+
+    /** Adds each account's owner, loading all the owners in one query (avoids "N+1 queries"). */
+    private PageResponse<AccountResponse> toResponses(Page<Account> accounts) {
+        Set<Long> userIds = accounts.stream().map(Account::getUserId).collect(Collectors.toSet());
+        Map<Long, User> usersById = userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getUserId, Function.identity()));
+        return PageResponse.from(
+                accounts.map(account -> AccountResponse.from(account, usersById.get(account.getUserId()))));
+    }
 
     /** Returns the amount with exactly 2 decimal places, or throws if it breaks a rule. */
     private BigDecimal validateAmount(BigDecimal amount) {

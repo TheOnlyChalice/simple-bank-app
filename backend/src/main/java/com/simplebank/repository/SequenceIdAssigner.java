@@ -1,6 +1,7 @@
 package com.simplebank.repository;
 
 import com.simplebank.model.Account;
+import com.simplebank.model.AuditEvent;
 import com.simplebank.model.Transaction;
 import com.simplebank.model.User;
 import org.bson.Document;
@@ -16,7 +17,7 @@ import org.springframework.stereotype.Component;
 import static org.springframework.data.mongodb.core.query.Criteria.where;
 
 /**
- * Gives new users, accounts, and transactions numeric IDs (1, 2, 3...), like
+ * Gives new users, accounts, transactions, and audit events numeric IDs (1, 2, 3...), like
  * MySQL's AUTO_INCREMENT, so the API is unchanged. MongoDB's own IDs are long codes.
  *
  * The "counters" collection holds one document per collection, e.g. { _id: "users", seq: 7 }.
@@ -51,6 +52,8 @@ public class SequenceIdAssigner implements BeforeConvertCallback<Object> {
             account.setAccountId(nextId(collection));
         } else if (entity instanceof Transaction txn && txn.getTxnId() == null) {
             txn.setTxnId(nextId(collection));
+        } else if (entity instanceof AuditEvent event && event.getAuditId() == null) {
+            event.setAuditId(nextId(collection));
         }
         return entity;
     }

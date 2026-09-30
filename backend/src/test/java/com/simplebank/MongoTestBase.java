@@ -22,7 +22,8 @@ import java.util.List;
  * so the container is started as a single-member replica set named "rs0".
  *
  * Before each test, the collections are emptied (their rules and indexes are kept),
- * so every test starts from a clean database.
+ * so every test starts from a clean database. The audit log is emptied too; that is
+ * only done in tests, since the app itself never deletes audit events.
  */
 @SpringBootTest
 public abstract class MongoTestBase {
@@ -75,7 +76,7 @@ public abstract class MongoTestBase {
 
     @BeforeEach
     protected void emptyCollections() {
-        for (String collection : List.of("users", "accounts", "transactions")) {
+        for (String collection : List.of("users", "accounts", "transactions", "audit_log")) {
             mongoTemplate.remove(new Query(), collection);
         }
     }
