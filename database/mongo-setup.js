@@ -15,7 +15,7 @@
 const rules = {
   users: {
     bsonType: "object",
-    required: ["_id", "name", "email", "address", "createdAt"],
+    required: ["_id", "name", "email", "address", "role", "createdAt"],
     properties: {
       _id:       { bsonType: "long" },
       name:      { bsonType: "string", minLength: 1, maxLength: 100 },
@@ -30,6 +30,8 @@ const rules = {
           zip:    { bsonType: "string", pattern: "^\\d{5}(-\\d{4})?$" }     // 21201 or 21201-1234
         }
       },
+      passwordHash: { bsonType: "string", minLength: 20 },            // BCrypt hash, never the password
+      role:         { enum: ["CUSTOMER", "ADMIN"] },
       createdAt: { bsonType: "date" }
     }
   },
@@ -77,7 +79,8 @@ const rules = {
       actor:            { bsonType: "string", minLength: 1 },           // who
       action:           { enum: ["USER_CREATED", "USER_UPDATED", "USER_DELETED",
                                  "ACCOUNT_CREATED", "ACCOUNT_UPDATED", "ACCOUNT_DELETED",
-                                 "DEPOSIT", "WITHDRAW", "TRANSFER"] },
+                                 "DEPOSIT", "WITHDRAW", "TRANSFER",
+                                 "LOGIN", "ACCESS_DENIED"] },
       outcome:          { enum: ["SUCCESS", "REJECTED", "FAILED"] },
       reason:           { bsonType: "string" },
       userId:           { bsonType: "long" },

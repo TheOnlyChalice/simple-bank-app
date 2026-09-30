@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Simple Bank API",
-    "description": "Start the backend first (./mvnw spring-boot:run, connected to MongoDB Atlas), then run the whole collection with the Runner, folders in order. 'Happy path' creates, reads and updates users and accounts, moves money (deposit, withdraw, transfer), pages through lists and history, searches users and accounts, lists premium accounts, and traces the transfer through the audit log. 'Business rules and errors' checks that every rule returns the right status code and that rejected attempts are audited. 'Cleanup' empties and deletes everything that was created and checks that the deletions were audited. Each run uses a unique email and city.",
+    "description": "Start the backend first (./mvnw spring-boot:run), and set the adminEmail and adminPassword collection variables (Current value) to the ADMIN_EMAIL and ADMIN_PASSWORD the backend was started with. Then run the whole collection with the Runner, folders in order. Requests send the customer's token by default (collection-level Bearer auth); admin-only requests use the admin's token, and register/login send none. 'Log in (admin)' gets the staff token. 'Happy path' registers a customer, logs in, and exercises every feature. 'Business rules and errors' checks every rule's status code. 'Security (401 and 403)' checks logins, forged tokens, and that customers can't reach each other's data or staff endpoints. 'Cleanup' deletes everything that was created. Each run uses a unique email, city, and password.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -44,24 +44,62 @@
     {
       "key": "transferTxnId",
       "value": ""
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@simplebank.com"
+    },
+    {
+      "key": "adminPassword",
+      "value": ""
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "token2",
+      "value": ""
+    },
+    {
+      "key": "token3",
+      "value": ""
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "email3",
+      "value": ""
+    },
+    {
+      "key": "userId3",
+      "value": ""
     }
   ],
   "item": [
     {
-      "name": "Happy path",
+      "name": "Log in (admin)",
+      "description": "Set the adminEmail and adminPassword collection variables (Current value) before running. Never save the real password as the Initial value, since that is exported with the collection.",
       "item": [
         {
-          "name": "Create User",
+          "name": "Log In as Admin",
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/api/users",
+              "raw": "{{baseUrl}}/api/auth/login",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "users"
+                "auth",
+                "login"
               ]
             },
             "header": [
@@ -72,12 +110,69 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"{{email}}\",\n  \"address\": { \"street\": \"100 Main St\", \"city\": \"{{city}}\", \"state\": \"MD\", \"zip\": \"21201\" }\n}",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Is bank staff', () => pm.expect(body.user.role).to.eql('ADMIN'));",
+                  "pm.collectionVariables.set('adminToken', body.accessToken);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Happy path",
+      "item": [
+        {
+          "name": "Register Customer",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"address\": { \"street\": \"100 Main St\", \"city\": \"{{city}}\", \"state\": \"MD\", \"zip\": \"21201\" }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "event": [
@@ -86,10 +181,11 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Unique email each run, so the collection can be run repeatedly",
-                  "pm.collectionVariables.set('email', 'john.' + Date.now() + '@example.com');",
-                  "// Unique city each run, so the search checks only find this run's users",
-                  "pm.collectionVariables.set('city', 'Testcity' + Date.now());"
+                  "// A unique email, city, and password each run, so the collection can be run repeatedly",
+                  "const stamp = Date.now();",
+                  "pm.collectionVariables.set('email', 'john.' + stamp + '@example.com');",
+                  "pm.collectionVariables.set('city', 'Testcity' + stamp);",
+                  "pm.collectionVariables.set('password', 'Pass' + stamp);"
                 ]
               }
             },
@@ -98,9 +194,94 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "const body = pm.response.json();",
                   "pm.test('Status is 201', () => pm.response.to.have.status(201));",
-                  "pm.collectionVariables.set('userId', pm.response.json().userId);",
-                  "pm.test('Address is returned', () => pm.expect(pm.response.json().address.state).to.eql('MD'));"
+                  "pm.test('Returns a login token', () => pm.expect(body.accessToken).to.be.a('string').and.not.empty);",
+                  "pm.test('Token type is Bearer', () => pm.expect(body.tokenType).to.eql('Bearer'));",
+                  "pm.test('New users are customers', () => pm.expect(body.user.role).to.eql('CUSTOMER'));",
+                  "pm.test('Address is returned', () => pm.expect(body.user.address.state).to.eql('MD'));",
+                  "pm.test('Password hash is never returned', () => pm.expect(body.user).to.not.have.property('passwordHash'));",
+                  "pm.collectionVariables.set('userId', body.user.userId);",
+                  "pm.collectionVariables.set('token', body.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Log In as Customer",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Logged in as this run\\'s user', () => pm.expect(body.user.userId).to.eql(Number(pm.collectionVariables.get('userId'))));",
+                  "pm.test('Token expires in the future', () => pm.expect(new Date(body.expiresAt).getTime()).to.be.above(Date.now()));",
+                  "pm.collectionVariables.set('token', body.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who Am I",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Returns the logged-in user', () => pm.expect(pm.response.json().email).to.eql(pm.collectionVariables.get('email')));"
                 ]
               }
             }
@@ -156,6 +337,16 @@
                 {
                   "key": "size",
                   "value": "1"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
                 }
               ]
             }
@@ -358,6 +549,16 @@
                 {
                   "key": "size",
                   "value": "1"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
                 }
               ]
             }
@@ -761,6 +962,16 @@
                   "value": "md"
                 }
               ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -805,6 +1016,16 @@
                   "value": "TOTAL"
                 }
               ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -846,6 +1067,16 @@
                 {
                   "key": "balanceMode",
                   "value": "ANY_ACCOUNT"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
                 }
               ]
             }
@@ -895,6 +1126,16 @@
                   "value": "100"
                 }
               ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -934,6 +1175,16 @@
                 {
                   "key": "size",
                   "value": "100"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
                 }
               ]
             }
@@ -979,6 +1230,16 @@
                   "value": "TRANSFER"
                 }
               ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -995,6 +1256,7 @@
                   "pm.test('Amount is 100', () => pm.expect(event.amount).to.eql(100));",
                   "pm.test('Links both history records', () => pm.expect(event.transactionIds.length).to.eql(2));",
                   "pm.test('Timestamp is UTC', () => pm.expect(event.timestamp).to.match(/Z$/));",
+                  "pm.test('Records who did it', () => pm.expect(event.actor).to.include(pm.collectionVariables.get('email')));",
                   "pm.collectionVariables.set('auditReference', event.referenceId);",
                   "pm.collectionVariables.set('transferTxnId', event.transactionIds[0]);"
                 ]
@@ -1016,6 +1278,16 @@
                 "audit",
                 "reference",
                 "{{auditReference}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
               ]
             }
           },
@@ -1046,6 +1318,16 @@
                 "audit",
                 "transactions",
                 "{{transferTxnId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
               ]
             }
           },
@@ -1290,17 +1572,18 @@
           ]
         },
         {
-          "name": "Create user with invalid data (400)",
+          "name": "Register with invalid data (400)",
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/api/users",
+              "raw": "{{baseUrl}}/api/auth/register",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "users"
+                "auth",
+                "register"
               ]
             },
             "header": [
@@ -1311,12 +1594,15 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"\",\n  \"email\": \"not-an-email\",\n  \"address\": { \"street\": \"100 Main St\", \"city\": \"Baltimore\", \"state\": \"MD\", \"zip\": \"21201\" }\n}",
+              "raw": "{\n  \"name\": \"\",\n  \"email\": \"not-an-email\",\n  \"password\": \"Secret123\",\n  \"address\": { \"street\": \"100 Main St\", \"city\": \"Baltimore\", \"state\": \"MD\", \"zip\": \"21201\" }\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "event": [
@@ -1333,17 +1619,18 @@
           ]
         },
         {
-          "name": "Create user with invalid address (400)",
+          "name": "Register with invalid address (400)",
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/api/users",
+              "raw": "{{baseUrl}}/api/auth/register",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "users"
+                "auth",
+                "register"
               ]
             },
             "header": [
@@ -1354,12 +1641,15 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Bad Address\",\n  \"email\": \"bad.address@example.com\",\n  \"address\": { \"street\": \"1 Oak Ave\", \"city\": \"Towson\", \"state\": \"Maryland\", \"zip\": \"123\" }\n}",
+              "raw": "{\n  \"name\": \"Bad Address\",\n  \"email\": \"bad.address@example.com\",\n  \"password\": \"Secret123\",\n  \"address\": { \"street\": \"1 Oak Ave\", \"city\": \"Towson\", \"state\": \"Maryland\", \"zip\": \"123\" }\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "event": [
@@ -1377,17 +1667,18 @@
           ]
         },
         {
-          "name": "Create user without address (400)",
+          "name": "Register without address (400)",
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/api/users",
+              "raw": "{{baseUrl}}/api/auth/register",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "users"
+                "auth",
+                "register"
               ]
             },
             "header": [
@@ -1398,12 +1689,15 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"No Address\",\n  \"email\": \"no.address@example.com\"\n}",
+              "raw": "{\n  \"name\": \"No Address\",\n  \"email\": \"no.address@example.com\",\n  \"password\": \"Secret123\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "event": [
@@ -1420,17 +1714,18 @@
           ]
         },
         {
-          "name": "Duplicate email (409)",
+          "name": "Register with a weak password (400)",
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/api/users",
+              "raw": "{{baseUrl}}/api/auth/register",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "users"
+                "auth",
+                "register"
               ]
             },
             "header": [
@@ -1441,12 +1736,62 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"John Again\",\n  \"email\": \"{{email}}\",\n  \"address\": { \"street\": \"100 Main St\", \"city\": \"Baltimore\", \"state\": \"MD\", \"zip\": \"21201\" }\n}",
+              "raw": "{\n  \"name\": \"Weak Password\",\n  \"email\": \"weak.password@example.com\",\n  \"password\": \"password\",\n  \"address\": { \"street\": \"1 Oak Ave\", \"city\": \"Towson\", \"state\": \"MD\", \"zip\": \"21204\" }\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Explains the password rule', () => pm.expect(pm.response.json().fieldErrors.password).to.include('letter and one number'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register with a duplicate email (409)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Again\",\n  \"email\": \"{{email}}\",\n  \"password\": \"Secret123\",\n  \"address\": { \"street\": \"100 Main St\", \"city\": \"Baltimore\", \"state\": \"MD\", \"zip\": \"21201\" }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "event": [
@@ -1462,17 +1807,18 @@
           ]
         },
         {
-          "name": "Create Another User",
+          "name": "Register Another Customer",
           "request": {
             "method": "POST",
             "url": {
-              "raw": "{{baseUrl}}/api/users",
+              "raw": "{{baseUrl}}/api/auth/register",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "users"
+                "auth",
+                "register"
               ]
             },
             "header": [
@@ -1483,12 +1829,15 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"{{email2}}\",\n  \"address\": { \"street\": \"100 Main St\", \"city\": \"Baltimore\", \"state\": \"MD\", \"zip\": \"21201\" }\n}",
+              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"{{email2}}\",\n  \"password\": \"Secret123\",\n  \"address\": { \"street\": \"100 Main St\", \"city\": \"Baltimore\", \"state\": \"MD\", \"zip\": \"21201\" }\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "noauth"
             }
           },
           "event": [
@@ -1506,8 +1855,10 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "const body = pm.response.json();",
                   "pm.test('Status is 201', () => pm.response.to.have.status(201));",
-                  "pm.collectionVariables.set('userId2', pm.response.json().userId);"
+                  "pm.collectionVariables.set('userId2', body.user.userId);",
+                  "pm.collectionVariables.set('token2', body.accessToken);"
                 ]
               }
             }
@@ -1628,6 +1979,16 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -1755,6 +2116,16 @@
                   "language": "json"
                 }
               }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -1811,6 +2182,16 @@
                 "users",
                 "99999",
                 "accounts"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
               ]
             }
           },
@@ -2015,6 +2396,16 @@
                   "value": "0"
                 }
               ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -2051,6 +2442,16 @@
                 {
                   "key": "maxBalance",
                   "value": "100"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
                 }
               ]
             }
@@ -2090,6 +2491,16 @@
                   "value": "SOMETIMES"
                 }
               ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -2121,6 +2532,16 @@
                 {
                   "key": "accountType",
                   "value": "GOLD"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
                 }
               ]
             }
@@ -2313,6 +2734,16 @@
                   "value": "REJECTED"
                 }
               ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -2325,7 +2756,7 @@
                   "pm.test('Status is 200', () => pm.response.to.have.status(200));",
                   "pm.test('Recorded as rejected', () => pm.expect(event.outcome).to.eql('REJECTED'));",
                   "pm.test('Says why', () => pm.expect(event.reason).to.include('Insufficient funds'));",
-                  "pm.test('Records who (until login: the caller address)', () => pm.expect(event.actor).to.match(/^anonymous@/));",
+                  "pm.test('Records who (the logged-in customer)', () => pm.expect(event.actor).to.include(pm.collectionVariables.get('email')));",
                   "pm.test('Nothing was created', () => pm.expect(event.transactionIds).to.be.empty);"
                 ]
               }
@@ -2345,6 +2776,16 @@
                 "api",
                 "accounts",
                 "premium"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
               ]
             }
           },
@@ -2381,6 +2822,16 @@
                   "value": "0"
                 }
               ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -2414,6 +2865,16 @@
                   "value": "MAYBE"
                 }
               ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -2441,6 +2902,16 @@
                 "api",
                 "audit",
                 "999999999"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
               ]
             }
           },
@@ -2483,6 +2954,606 @@
                   "pm.test('Status is 200', () => pm.response.to.have.status(200));",
                   "pm.test('First account still 200', () => pm.expect(byId[Number(pm.collectionVariables.get('accountId'))]).to.eql(200));",
                   "pm.test('Second account still 100', () => pm.expect(byId[Number(pm.collectionVariables.get('accountId2'))]).to.eql(100));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Security (401 and 403)",
+      "item": [
+        {
+          "name": "No token (401)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Explains how to log in', () => pm.expect(pm.response.json().message).to.include('Authentication required'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tampered token (401)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}x",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Token rejected', () => pm.expect(pm.response.json().message).to.include('invalid or has expired'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wrong password (401)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"WrongPass1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Generic message', () => pm.expect(pm.response.json().message).to.eql('Invalid email or password'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown email gets the same answer (401)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"nobody.at.all@example.com\",\n  \"password\": \"Secret123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Same message, so emails can\\'t be discovered', () => pm.expect(pm.response.json().message).to.eql('Invalid email or password'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer lists all users (403)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));",
+                  "pm.test('Staff only', () => pm.expect(pm.response.json().message).to.include('bank staff'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer reads the audit log (403)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Another customer reads this account (403)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{accountId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{accountId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token2}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));",
+                  "pm.test('Not theirs', () => pm.expect(pm.response.json().message).to.eql('You can only access your own accounts'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Another customer withdraws from this account (403)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{accountId}}/withdraw",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{accountId}}",
+                "withdraw"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token2}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Another customer transfers out of this account (403)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromAccountId\": {{accountId}},\n  \"toAccountId\": {{accountId2}},\n  \"amount\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token2}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Another customer reads this profile (403)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token2}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registering as ADMIN still makes a customer",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Mallory\",\n  \"email\": \"{{email3}}\",\n  \"password\": \"Secret123\",\n  \"role\": \"ADMIN\",\n  \"address\": { \"street\": \"1 Oak Ave\", \"city\": \"Towson\", \"state\": \"MD\", \"zip\": \"21204\" }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('email3', 'mallory.' + Date.now() + '@example.com');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('The role in the request is ignored', () => pm.expect(body.user.role).to.eql('CUSTOMER'));",
+                  "pm.collectionVariables.set('userId3', body.user.userId);",
+                  "pm.collectionVariables.set('token3', body.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit: Access Denials Were Recorded",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit?action=ACCESS_DENIED&accountId={{accountId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit"
+              ],
+              "query": [
+                {
+                  "key": "action",
+                  "value": "ACCESS_DENIED"
+                },
+                {
+                  "key": "accountId",
+                  "value": "{{accountId}}"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const events = pm.response.json().content;",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Three denied attempts on this account', () => pm.expect(events.length).to.eql(3));",
+                  "pm.test('Recorded who tried', () => events.forEach(e => pm.expect(e.actor).to.include(pm.collectionVariables.get('email2'))));",
+                  "pm.test('Recorded as rejected, with a reason', () => events.forEach(e => { pm.expect(e.outcome).to.eql('REJECTED'); pm.expect(e.reason).to.not.be.empty; }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit: Failed Login Was Recorded",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit?action=LOGIN&outcome=REJECTED&size=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit"
+              ],
+              "query": [
+                {
+                  "key": "action",
+                  "value": "LOGIN"
+                },
+                {
+                  "key": "outcome",
+                  "value": "REJECTED"
+                },
+                {
+                  "key": "size",
+                  "value": "100"
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const events = pm.response.json().content;",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('This run\\'s wrong password is on record', () => pm.expect(events.some(e => e.details && e.details.includes(pm.collectionVariables.get('email')))).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Balance unchanged after denied attempts",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/{{accountId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "{{accountId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Still 200', () => pm.expect(pm.response.json().balance).to.eql(200));"
                 ]
               }
             }
@@ -2662,6 +3733,16 @@
                   "value": "ACCOUNT_DELETED"
                 }
               ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -2759,6 +3840,16 @@
                   "value": "USER_DELETED"
                 }
               ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -2819,6 +3910,54 @@
                 "users",
                 "{{userId2}}"
               ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token2}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete escalation test user (204)",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId3}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{userId3}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token3}}",
+                  "type": "string"
+                }
+              ]
             }
           },
           "event": [
@@ -2835,5 +3974,15 @@
         }
       ]
     }
-  ]
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  }
 }
