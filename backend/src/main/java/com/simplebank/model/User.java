@@ -27,15 +27,30 @@ public class User {
     /** Embedded document. The index above makes searching by state and city fast. */
     private Address address;
 
+    /**
+     * The BCrypt hash of the password. The password itself is never stored.
+     * Null for users created without a password, who can't log in.
+     */
+    private String passwordHash;
+
+    private Role role = Role.CUSTOMER;
+
     private LocalDateTime createdAt;
 
     public User() {
     }
 
+    /** A customer without a password (can't log in until one is set). */
     public User(String name, String email, Address address) {
+        this(name, email, address, null, Role.CUSTOMER);
+    }
+
+    public User(String name, String email, Address address, String passwordHash, Role role) {
         this.name = name;
         this.email = email;
         this.address = address;
+        this.passwordHash = passwordHash;
+        this.role = role;
         this.createdAt = LocalDateTime.now();
     }
 
@@ -50,6 +65,12 @@ public class User {
 
     public Address getAddress() { return address; }
     public void setAddress(Address address) { this.address = address; }
+
+    public String getPasswordHash() { return passwordHash; }
+    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
+
+    public Role getRole() { return role; }
+    public void setRole(Role role) { this.role = role; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

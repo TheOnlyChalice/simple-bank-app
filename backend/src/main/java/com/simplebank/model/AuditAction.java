@@ -10,5 +10,9 @@ public enum AuditAction {
     ACCOUNT_DELETED,
     DEPOSIT,
     WITHDRAW,
-    TRANSFER
+    TRANSFER,
+    /** A login attempt, successful or not. */
+    LOGIN,
+    /** A logged-in user tried to use something that isn't theirs. */
+    ACCESS_DENIED
 }

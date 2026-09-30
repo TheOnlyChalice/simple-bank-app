@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.stereotype.Component;
 
@@ -19,9 +20,11 @@ import org.springframework.stereotype.Component;
  * These are the MongoDB equivalent of the CHECK constraints in the old SQL schema.
  *
  * Idempotent: safe to run on every startup. Requires the dbAdmin role on the database.
+ * Runs first (@Order 1), before the admin account is created.
  * database/mongo-setup.js contains the same rules for setting up a database by hand.
  */
 @Component
+@Order(1)
 public class MongoSchemaSetup implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(MongoSchemaSetup.class);
@@ -29,11 +32,11 @@ public class MongoSchemaSetup implements ApplicationRunner {
     static final String USERS_SCHEMA = """
             {
               "bsonType": "object",
-              "required": ["_id", "name", "email", "address", "createdAt"],
+              "required": ["_id", "name", "email", "address", "role", "createdAt"],
               "properties": {
-                "_id":       { "bsonType": "long" },
-                "name":      { "bsonType": "string", "minLength": 1, "maxLength": 100 },
-                "email":     { "bsonType": "string", "maxLength": 100, "pattern": "^[^@\\\\s]+@[^@\\\\s]+$" },
+                "_id":          { "bsonType": "long" },
+                "name":         { "bsonType": "string", "minLength": 1, "maxLength": 100 },
+                "email":        { "bsonType": "string", "maxLength": 100, "pattern": "^[^@\\\\s]+@[^@\\\\s]+$" },
                 "address": {
                   "bsonType": "object",
                   "required": ["street", "city", "state", "zip"],
@@ -44,7 +47,9 @@ public class MongoSchemaSetup implements ApplicationRunner {
                     "zip":    { "bsonType": "string", "pattern": "^\\\\d{5}(-\\\\d{4})?$" }
                   }
                 },
-                "createdAt": { "bsonType": "date" }
+                "passwordHash": { "bsonType": "string", "minLength": 20 },
+                "role":         { "enum": ["CUSTOMER", "ADMIN"] },
+                "createdAt":    { "bsonType": "date" }
               }
             }
             """;
@@ -100,7 +105,8 @@ public class MongoSchemaSetup implements ApplicationRunner {
                 "actor":            { "bsonType": "string", "minLength": 1 },
                 "action":           { "enum": ["USER_CREATED", "USER_UPDATED", "USER_DELETED",
                                                "ACCOUNT_CREATED", "ACCOUNT_UPDATED", "ACCOUNT_DELETED",
-                                               "DEPOSIT", "WITHDRAW", "TRANSFER"] },
+                                               "DEPOSIT", "WITHDRAW", "TRANSFER",
+                                               "LOGIN", "ACCESS_DENIED"] },
                 "outcome":          { "enum": ["SUCCESS", "REJECTED", "FAILED"] },
                 "reason":           { "bsonType": "string" },
                 "userId":           { "bsonType": "long" },

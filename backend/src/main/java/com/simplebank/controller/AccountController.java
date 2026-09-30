@@ -8,6 +8,7 @@ import com.simplebank.dto.TransactionResponse;
 import com.simplebank.dto.UpdateAccountRequest;
 import com.simplebank.model.AccountType;
 import com.simplebank.repository.AccountFilter;
+import com.simplebank.security.AccessGuard;
 import com.simplebank.service.AccountService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -25,30 +26,34 @@ import java.math.BigDecimal;
 import java.net.URI;
 
 /**
- * CRUD and search for accounts, plus premium accounts, deposit, withdraw, and
- * transaction history (section 5.4).
- * Controllers only deal with HTTP: read the request, call the service, return the result.
+ * Accounts, premium accounts, deposit, withdraw, and transaction history (section 5.4).
+ * Listing all accounts and premium accounts is ADMIN only (see SecurityConfig); for
+ * everything else, customers can only reach their own accounts (AccessGuard).
  */
 @RestController
 @RequestMapping("/api/accounts")
 public class AccountController {
 
     private final AccountService accountService;
+    private final AccessGuard accessGuard;
 
-    public AccountController(AccountService accountService) {
+    public AccountController(AccountService accountService, AccessGuard accessGuard) {
         this.accountService = accountService;
+        this.accessGuard = accessGuard;
     }
 
     // ----- CRUD -----
 
+    /** Customers can only open accounts for themselves. */
     @PostMapping
     public ResponseEntity<AccountResponse> createAccount(@Valid @RequestBody CreateAccountRequest request) {
+        accessGuard.requireSelfOrAdmin(request.userId());
         AccountResponse account = accountService.createAccount(request.userId(), request.accountType());
         return ResponseEntity.created(URI.create("/api/accounts/" + account.accountId())).body(account);
     }
 
     /**
-     * Paginated, oldest first, with optional filters, e.g.
+     * ADMIN only. Paginated, oldest first, with optional filters, e.g.
      * /api/accounts?minBalance=100&maxBalance=500&accountType=SAVINGS
      */
     @GetMapping
@@ -62,10 +67,7 @@ public class AccountController {
         return accountService.getAllAccounts(filter, page, size);
     }
 
-    /**
-     * Premium accounts: balance at or above the threshold, richest first, e.g.
-     * /api/accounts/premium?threshold=1000
-     */
+    /** ADMIN only. Balance at or above the threshold, richest first, e.g. /api/accounts/premium?threshold=1000 */
     @GetMapping("/premium")
     public PageResponse<AccountResponse> getPremiumAccounts(
             @RequestParam BigDecimal threshold,
@@ -76,16 +78,19 @@ public class AccountController {
 
     @GetMapping("/{id}")
     public AccountResponse getAccount(@PathVariable Long id) {
+        accessGuard.requireAccountOwnerOrAdmin(id);
         return accountService.getAccount(id);
     }
 
     @PutMapping("/{id}")
     public AccountResponse updateAccount(@PathVariable Long id, @Valid @RequestBody UpdateAccountRequest request) {
+        accessGuard.requireAccountOwnerOrAdmin(id);
         return accountService.updateAccount(id, request.accountType());
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteAccount(@PathVariable Long id) {
+        accessGuard.requireAccountOwnerOrAdmin(id);
         accountService.deleteAccount(id);
         return ResponseEntity.noContent().build();
     }
@@ -94,11 +99,13 @@ public class AccountController {
 
     @PostMapping("/{id}/deposit")
     public AccountResponse deposit(@PathVariable Long id, @Valid @RequestBody AmountRequest request) {
+        accessGuard.requireAccountOwnerOrAdmin(id);
         return accountService.deposit(id, request.amount());
     }
 
     @PostMapping("/{id}/withdraw")
     public AccountResponse withdraw(@PathVariable Long id, @Valid @RequestBody AmountRequest request) {
+        accessGuard.requireAccountOwnerOrAdmin(id);
         return accountService.withdraw(id, request.amount());
     }
 
@@ -108,6 +115,7 @@ public class AccountController {
             @PathVariable Long id,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
+        accessGuard.requireAccountOwnerOrAdmin(id);
         return accountService.getTransactions(id, page, size);
     }
 }

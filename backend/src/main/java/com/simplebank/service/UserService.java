@@ -7,6 +7,7 @@ import com.simplebank.exception.OperationNotAllowedException;
 import com.simplebank.exception.ResourceNotFoundException;
 import com.simplebank.model.Address;
 import com.simplebank.model.AuditAction;
+import com.simplebank.model.Role;
 import com.simplebank.model.User;
 import com.simplebank.repository.AccountRepository;
 import com.simplebank.repository.UserFilter;
@@ -57,18 +58,24 @@ public class UserService {
         return UserResponse.from(findUser(userId));
     }
 
-    /**
-     * The email check gives a clear error in the normal case. If two requests race,
-     * the unique index on email still rejects the second one.
-     */
+    /** A customer without a password, who can't log in until one is set (used by tests and tools). */
     public UserResponse createUser(String name, String email, Address address) {
+        return registerUser(name, email, address, null, Role.CUSTOMER);
+    }
+
+    /**
+     * Creates a user with an already-hashed password and a role. The email check gives a
+     * clear error in the normal case; if two requests race, the unique index still rejects one.
+     */
+    public UserResponse registerUser(String name, String email, Address address, String passwordHash, Role role) {
         String normalizedEmail = normalizeEmail(email);
-        AuditDetails audit = AuditDetails.none().withDetails("email " + normalizedEmail);
+        AuditDetails audit = AuditDetails.none().withDetails("email " + normalizedEmail + ", role " + role);
         return auditService.recordFailures(AuditAction.USER_CREATED, audit, () -> transactions.run(() -> {
             if (userRepository.existsByEmail(normalizedEmail)) {
                 throw new DuplicateEmailException(normalizedEmail);
             }
-            User user = userRepository.save(new User(name.trim(), normalizedEmail, normalizeAddress(address)));
+            User user = userRepository.save(
+                    new User(name.trim(), normalizedEmail, normalizeAddress(address), passwordHash, role));
             auditService.recordSuccess(AuditAction.USER_CREATED, audit.withUserId(user.getUserId()), List.of());
             return UserResponse.from(user);
         }));
@@ -102,6 +109,7 @@ public class UserService {
                 changed.add("address");
             }
 
+            // The password hash and role are kept as they are: this update can't change them
             user.setName(newName);
             user.setEmail(normalizedEmail);
             user.setAddress(newAddress);

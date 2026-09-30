@@ -5,6 +5,7 @@ import com.simplebank.dto.PageResponse;
 import com.simplebank.exception.DuplicateEmailException;
 import com.simplebank.exception.InsufficientFundsException;
 import com.simplebank.exception.InvalidAmountException;
+import com.simplebank.exception.InvalidCredentialsException;
 import com.simplebank.exception.InvalidRequestException;
 import com.simplebank.exception.OperationNotAllowedException;
 import com.simplebank.exception.ResourceNotFoundException;
@@ -13,11 +14,17 @@ import com.simplebank.model.AuditEvent;
 import com.simplebank.model.AuditOutcome;
 import com.simplebank.repository.AuditFilter;
 import com.simplebank.repository.AuditRepository;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -67,6 +74,16 @@ public class AuditService {
         }
     }
 
+    /** A logged-in user tried to use something that isn't theirs, or an admin-only endpoint. */
+    public void recordAccessDenied(Long targetUserId, Long accountId, String reason) {
+        try {
+            auditRepository.save(new AuditEvent(AuditAction.ACCESS_DENIED, AuditOutcome.REJECTED, currentActor(),
+                    targetUserId, accountId, null, null, List.of(), reason, currentRequest()));
+        } catch (RuntimeException auditError) {
+            log.error("Could not record an access denial in the audit log", auditError);
+        }
+    }
+
     private void recordFailure(AuditAction action, AuditDetails details, RuntimeException error) {
         try {
             auditRepository.save(new AuditEvent(action, outcomeFor(error), currentActor(),
@@ -78,16 +95,18 @@ public class AuditService {
         }
     }
 
-    /** REJECTED means a business rule refused the request; FAILED means something else went wrong. */
+    /** REJECTED means a business or security rule refused the request; FAILED means something else went wrong. */
     static AuditOutcome outcomeFor(RuntimeException error) {
-        boolean businessRule = error instanceof InsufficientFundsException
+        boolean ruleRefused = error instanceof InsufficientFundsException
                 || error instanceof InvalidAmountException
                 || error instanceof InvalidRequestException
                 || error instanceof OperationNotAllowedException
                 || error instanceof ResourceNotFoundException
                 || error instanceof DuplicateEmailException
+                || error instanceof InvalidCredentialsException
+                || error instanceof AccessDeniedException
                 || error instanceof DataIntegrityViolationException;
-        return businessRule ? AuditOutcome.REJECTED : AuditOutcome.FAILED;
+        return ruleRefused ? AuditOutcome.REJECTED : AuditOutcome.FAILED;
     }
 
     private static String reasonFor(RuntimeException error) {
@@ -96,14 +115,32 @@ public class AuditService {
     }
 
     /**
-     * Who made the request. Until login exists (Step 3), the caller's IP address for API
-     * requests, or "system" for work that doesn't come from an HTTP request (like tests).
+     * Who made the request: the logged-in user, e.g. "ana@example.com (user 5, CUSTOMER)".
+     * Before logging in (registering, logging in), the caller's IP address instead.
+     * "system" for work that doesn't come from an HTTP request.
      */
     static String currentActor() {
-        if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes) {
-            return "anonymous@" + attributes.getRequest().getRemoteAddr();
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication instanceof JwtAuthenticationToken token) {
+            Jwt jwt = token.getToken();
+            return jwt.getClaimAsString("email") + " (user " + jwt.getSubject() + ", "
+                    + jwt.getClaimAsString("role") + ")";
         }
-        return "system";
+        HttpServletRequest request = currentHttpRequest();
+        return request != null ? "anonymous@" + request.getRemoteAddr() : "system";
+    }
+
+    /** e.g. "POST /api/accounts/7/withdraw" */
+    private static String currentRequest() {
+        HttpServletRequest request = currentHttpRequest();
+        return request != null ? request.getMethod() + " " + request.getRequestURI() : null;
+    }
+
+    private static HttpServletRequest currentHttpRequest() {
+        if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes) {
+            return attributes.getRequest();
+        }
+        return null;
     }
 
     // ----- Reading -----
