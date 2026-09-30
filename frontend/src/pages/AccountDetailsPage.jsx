@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { accounts } from '../api/bank';
 import Alert from '../components/Alert';
 import TransactionTable from '../components/TransactionTable';
@@ -9,9 +9,13 @@ import { formatAccountType, formatDate, formatMoney } from '../components/format
 export default function AccountDetailsPage() {
   const { accountId } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const [account, setAccount] = useState(null);
   const [recent, setRecent] = useState([]);
   const [error, setError] = useState('');
+  const [settingsMessage, setSettingsMessage] = useState('');
+  const [savingType, setSavingType] = useState(false);
+  const [closing, setClosing] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -26,6 +30,33 @@ export default function AccountDetailsPage() {
       .catch((err) => { if (!ignore) setError(err.message); });
     return () => { ignore = true; };
   }, [accountId]);
+
+  async function handleTypeChange(event) {
+    const accountType = event.target.value;
+    setSavingType(true);
+    setSettingsMessage('');
+    try {
+      const updated = await accounts.update(accountId, accountType);
+      setAccount(updated);
+    } catch (err) {
+      setSettingsMessage(err.message);
+    } finally {
+      setSavingType(false);
+    }
+  }
+
+  async function handleClose() {
+    if (!window.confirm('Close this account? This cannot be undone.')) return;
+    setClosing(true);
+    setSettingsMessage('');
+    try {
+      await accounts.remove(accountId);
+      navigate('/', { state: { notice: 'The account has been closed.' } });
+    } catch (err) {
+      setSettingsMessage(err.message);
+      setClosing(false);
+    }
+  }
 
   if (error) {
     return (
@@ -69,6 +100,23 @@ export default function AccountDetailsPage() {
         <h2>Recent activity</h2>
         <TransactionTable transactions={recent} />
       </section>
+
+      <section className="panel stack">
+        <h2>Account settings</h2>
+        <Alert>{settingsMessage}</Alert>
+        <div className="field">
+          <label htmlFor="accountType">Account type</label>
+          <select id="accountType" value={account.accountType} onChange={handleTypeChange} disabled={savingType}>
+            <option value="SAVINGS">Savings</option>
+            <option value="CHECKING">Checking</option>
+          </select>
+        </div>
+        <button type="button" className="button danger" onClick={handleClose} disabled={closing}>
+          {closing ? 'Closing…' : 'Close account'}
+        </button>
+        <p className="muted">The balance must be $0.00 before an account can be closed.</p>
+      </section>
     </div>
   );
 }
+

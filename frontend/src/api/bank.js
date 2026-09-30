@@ -11,12 +11,14 @@ export const users = {
   get: (userId) => apiFetch(`/api/users/${userId}`),
   accounts: (userId) => apiFetch(`/api/users/${userId}/accounts`),
   update: (userId, details) => apiFetch(`/api/users/${userId}`, { method: 'PUT', body: details }),
+  remove: (userId) => apiFetch(`/api/users/${userId}`, { method: 'DELETE' }),
   search: (filters) => apiFetch('/api/users', { query: filters }), // staff only
 };
 
 export const accounts = {
   create: (userId, accountType) => apiFetch('/api/accounts', { method: 'POST', body: { userId, accountType } }),
   get: (accountId) => apiFetch(`/api/accounts/${accountId}`),
+  update: (accountId, accountType) => apiFetch(`/api/accounts/${accountId}`, { method: 'PUT', body: { accountType } }),
   remove: (accountId) => apiFetch(`/api/accounts/${accountId}`, { method: 'DELETE' }),
   deposit: (accountId, amount) =>
     apiFetch(`/api/accounts/${accountId}/deposit`, { method: 'POST', body: { amount: toAmount(amount) } }),
