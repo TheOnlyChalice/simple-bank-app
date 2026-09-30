@@ -3,7 +3,8 @@
 A full-stack banking app where users can create accounts, view account details,
 deposit, withdraw, and transfer money, and view paginated transaction history.
 Users and accounts support full CRUD (create, read, update, delete), one user can
-have many accounts, and users and accounts can be searched by address and balance.
+have many accounts, users and accounts can be searched by address and balance, and
+every change and every rejected attempt is recorded in an append-only audit trail.
 
 Full specification: [docs/Simple_Bank_Application_Project_Document.pdf](docs/Simple_Bank_Application_Project_Document.pdf)
 
@@ -45,8 +46,9 @@ is still in this branch's Git history.
   MongoDB multi-document transaction, so its changes are saved together or not at all.
 - **Repositories** are Spring Data `MongoRepository` interfaces. Spring builds the
   queries from the method names (derived queries).
-- **Documents** (`User`, `Account`, `Transaction`) map to the `users`, `accounts`, and
-  `transactions` collections.
+- **Documents** (`User`, `Account`, `Transaction`, `AuditEvent`) map to the `users`, `accounts`,
+  `transactions`, and `audit_log` collections.
+- **Audit trail:** `AuditController` → `AuditService` → `AuditRepository` → `audit_log`.
 
 In Step 1 the repositories stored data in memory. Because the services only depended on
 repository interfaces, switching to a database did not change the controllers or business rules.
@@ -61,6 +63,10 @@ Example documents (MongoDB stores `_id` for the ID, and money as exact `Decimal1
     accounts:      { _id: 1, userId: 1, balance: NumberDecimal("300.00"), accountType: "SAVINGS", createdAt: ... }
     transactions:  { _id: 2, accountId: 1, txnType: "TRANSFER_OUT", amount: NumberDecimal("200.00"),
                      relatedAccountId: 2, createdAt: ... }
+    audit_log:     { _id: 7, referenceId: "93197a42-...", timestamp: ISODate("2026-09-30T13:50:33Z"),
+                     actor: "anonymous@127.0.0.1", action: "TRANSFER", outcome: "SUCCESS",
+                     userId: 1, accountId: 1, relatedAccountId: 2, amount: NumberDecimal("200.00"),
+                     transactionIds: [3, 4], details: "from balance 500.00 -> 300.00; to balance 0.00 -> 200.00" }
     counters:      { _id: "accounts", seq: 2 }
 
 - **Numeric IDs.** MongoDB's default IDs are long codes. To keep the API's numeric IDs
@@ -121,6 +127,7 @@ constraints). MongoDB rejects any insert or update that breaks them, even ones t
 | `users` | name, email, and address required; email format; **unique email** (index); address has street, city, a 2-letter uppercase state, and a 5-digit or ZIP+4 zip |
 | `accounts` | balance is a Decimal128 **≥ 0**; type is `SAVINGS` or `CHECKING`; owner required |
 | `transactions` | amount is a Decimal128 **> 0**; valid type; transfers **must** name the other account, deposits and withdrawals **must not** |
+| `audit_log` | reference ID, UTC timestamp, actor, action, and outcome required; valid action and outcome; anything that isn't a success **must** include a reason |
 
 ## Tests
 
@@ -156,6 +163,7 @@ before each test.
 |--------|----------|------|---------|
 | POST | `/api/accounts` | `{ "userId": 1, "accountType": "SAVINGS" }` | 201 |
 | GET | `/api/accounts?page=0&size=20` (plus optional filters, below) | | 200 |
+| GET | `/api/accounts/premium?threshold=1000` | | 200 |
 | GET | `/api/accounts/{id}` | | 200 |
 | PUT | `/api/accounts/{id}` | `{ "accountType": "CHECKING" }` | 200 |
 | DELETE | `/api/accounts/{id}` | | 204 |
@@ -215,6 +223,50 @@ that joins each user's accounts (`$lookup`) and, for `TOTAL`, adds them up (`$su
     GET /api/accounts?minBalance=100&accountType=SAVINGS
 
 `minBalance` above `maxBalance`, an unknown `balanceMode`, or an unknown `accountType` returns a 400.
+
+### Premium accounts
+
+`GET /api/accounts/premium?threshold=1000` returns every account whose balance is **at or above**
+the threshold, **richest first** (equal balances oldest first), paginated. `threshold` is required
+and must be greater than zero.
+
+## Audit trail
+
+Every change and every rejected or failed attempt is recorded in the `audit_log` collection, for
+fraud and loss prevention and compliance: **who, when, which accounts, how much, and why**.
+
+| Field | Meaning |
+|---|---|
+| `auditId`, `referenceId` | A number and a unique trace ID (UUID) |
+| `timestamp` | When it happened, in UTC (e.g. `2026-09-30T13:50:33.259Z`) |
+| `actor` | Who did it. Until login is added (Step 3): `anonymous@<caller IP address>` |
+| `action` | `USER_CREATED`, `USER_UPDATED`, `USER_DELETED`, `ACCOUNT_CREATED`, `ACCOUNT_UPDATED`, `ACCOUNT_DELETED`, `DEPOSIT`, `WITHDRAW`, `TRANSFER` |
+| `outcome` | `SUCCESS`, `REJECTED` (a business rule refused it), or `FAILED` (a system problem) |
+| `reason` | Why it was rejected or failed |
+| `userId`, `accountId`, `relatedAccountId` | The user and accounts involved (a transfer has both accounts) |
+| `amount` | The amount requested, recorded even when rejected |
+| `transactionIds` | The history records created (a transfer creates two, linked to one event) |
+| `details` | Context such as the balance before and after, or which user fields changed |
+
+**How it stays trustworthy:**
+
+- **Successes are recorded in the same MongoDB transaction** as the change itself, so money never
+  moves without an audit record.
+- **Rejected and failed attempts are recorded after the transaction rolls back**, so they are on
+  record even though nothing changed.
+- **Append-only:** the audit repository has no update or delete methods, and the API has no
+  endpoints to create, change, or delete audit events. Deleting an account or user does not erase
+  its audit trail.
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/audit?accountId=&userId=&action=&outcome=&from=&to=&page=0&size=20` | Search, newest first. `accountId` matches either side of a transfer; `from` and `to` are UTC timestamps |
+| GET | `/api/audit/{auditId}` | One event |
+| GET | `/api/audit/reference/{referenceId}` | One event by its trace ID |
+| GET | `/api/audit/transactions/{txnId}` | Trace a history record back to the event that created it |
+
+    GET /api/audit?accountId=1&outcome=REJECTED
+    GET /api/audit?action=TRANSFER&from=2026-09-30T00:00:00Z
 
 ### Pagination
 
@@ -278,8 +330,8 @@ Every error returns the same JSON shape:
 
 | Status | When |
 |--------|------|
-| 400 | Validation failure (including the address), invalid amount, insufficient funds, transfer to the same account, invalid page, size, or search filter, malformed JSON |
-| 404 | User or account not found |
+| 400 | Validation failure (including the address), invalid amount, insufficient funds, transfer to the same account, invalid page, size, or search filter, missing or invalid premium threshold, `from` after `to` in an audit search, malformed JSON |
+| 404 | User, account, or audit event not found |
 | 409 | Email already registered, deleting an account that has money, deleting a user who has accounts, or a database rule violation |
 | 415 | Request body sent without `Content-Type: application/json` |
 | 503 | The account stayed busy with other requests; safe to retry |
@@ -292,14 +344,17 @@ the deployed frontend's URL is added there in Step 5.
 
 ## Testing with Postman
 
-Import `postman/SimpleBank.postman_collection.json`, start the backend, and run the
+Import `postman/Joseph_Hilte_simplebank.json`, start the backend, and run the
 whole collection:
 
 - **Happy path** creates, reads, and updates a user and two accounts, deposits,
   withdraws, transfers between the accounts, pages through lists and history, and
-  searches users (by city, state, and both balance modes) and accounts (by balance and type).
-- **Business rules and errors** checks that every rule returns the correct status code.
-- **Cleanup (delete)** empties and deletes the accounts and users that were created.
+  searches users (by city, state, and both balance modes) and accounts (by balance and type),
+  lists premium accounts, and traces the transfer through the audit log.
+- **Business rules and errors** checks that every rule returns the correct status code, and that
+  rejected attempts are recorded in the audit log.
+- **Cleanup (delete)** empties and deletes the accounts and users that were created, and checks
+  that the deletions were audited.
 
 The collection generates a new email and a new city on every run, so it can be run
 repeatedly against the same database, and the search checks only see that run's users.

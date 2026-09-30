@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Simple Bank API",
-    "description": "Start the backend first (./mvnw spring-boot:run, connected to MongoDB Atlas), then run the whole collection with the Runner, folders in order. 'Happy path' creates, reads and updates users and accounts, moves money (deposit, withdraw, transfer), pages through lists and history, and searches users and accounts. 'Business rules and errors' checks that every rule returns the right status code. 'Cleanup' empties and deletes everything that was created. Each run uses a unique city, so the search checks only see that run's users.",
+    "description": "Start the backend first (./mvnw spring-boot:run, connected to MongoDB Atlas), then run the whole collection with the Runner, folders in order. 'Happy path' creates, reads and updates users and accounts, moves money (deposit, withdraw, transfer), pages through lists and history, searches users and accounts, lists premium accounts, and traces the transfer through the audit log. 'Business rules and errors' checks that every rule returns the right status code and that rejected attempts are audited. 'Cleanup' empties and deletes everything that was created and checks that the deletions were audited. Each run uses a unique email and city.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -35,6 +35,14 @@
     },
     {
       "key": "city",
+      "value": ""
+    },
+    {
+      "key": "auditReference",
+      "value": ""
+    },
+    {
+      "key": "transferTxnId",
       "value": ""
     }
   ],
@@ -899,6 +907,156 @@
                   "pm.test('Status is 200', () => pm.response.to.have.status(200));",
                   "pm.test('Includes the $100 SAVINGS account', () => pm.expect(ids).to.include(Number(pm.collectionVariables.get('accountId2'))));",
                   "pm.test('Excludes the $200 account', () => pm.expect(ids).to.not.include(Number(pm.collectionVariables.get('accountId'))));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Premium Accounts (threshold 150)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/premium?threshold=150&size=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "premium"
+              ],
+              "query": [
+                {
+                  "key": "threshold",
+                  "value": "150"
+                },
+                {
+                  "key": "size",
+                  "value": "100"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const accounts = pm.response.json().content;",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const ids = accounts.map(a => a.accountId);",
+                  "pm.test('Includes the $200 account', () => pm.expect(ids).to.include(Number(pm.collectionVariables.get('accountId'))));",
+                  "pm.test('Excludes the $100 account', () => pm.expect(ids).to.not.include(Number(pm.collectionVariables.get('accountId2'))));",
+                  "pm.test('Every balance is at least 150', () => accounts.forEach(a => pm.expect(a.balance).to.be.at.least(150)));",
+                  "pm.test('Richest first', () => accounts.forEach((a, i) => { if (i > 0) pm.expect(a.balance).to.be.at.most(accounts[i - 1].balance); }));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit: This Run's Transfer",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit?accountId={{accountId2}}&action=TRANSFER",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit"
+              ],
+              "query": [
+                {
+                  "key": "accountId",
+                  "value": "{{accountId2}}"
+                },
+                {
+                  "key": "action",
+                  "value": "TRANSFER"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const event = pm.response.json().content[0];",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Successful transfer', () => pm.expect(event.outcome).to.eql('SUCCESS'));",
+                  "pm.test('From the first account', () => pm.expect(event.accountId).to.eql(Number(pm.collectionVariables.get('accountId'))));",
+                  "pm.test('To the second account', () => pm.expect(event.relatedAccountId).to.eql(Number(pm.collectionVariables.get('accountId2'))));",
+                  "pm.test('Amount is 100', () => pm.expect(event.amount).to.eql(100));",
+                  "pm.test('Links both history records', () => pm.expect(event.transactionIds.length).to.eql(2));",
+                  "pm.test('Timestamp is UTC', () => pm.expect(event.timestamp).to.match(/Z$/));",
+                  "pm.collectionVariables.set('auditReference', event.referenceId);",
+                  "pm.collectionVariables.set('transferTxnId', event.transactionIds[0]);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit: Trace by Reference ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit/reference/{{auditReference}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit",
+                "reference",
+                "{{auditReference}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Finds the transfer', () => pm.expect(pm.response.json().action).to.eql('TRANSFER'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit: Trace a History Record",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit/transactions/{{transferTxnId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit",
+                "transactions",
+                "{{transferTxnId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Leads back to the same event', () => pm.expect(pm.response.json().referenceId).to.eql(pm.collectionVariables.get('auditReference')));"
                 ]
               }
             }
@@ -2129,6 +2287,176 @@
           ]
         },
         {
+          "name": "Audit: Rejected Withdrawal Was Recorded",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit?accountId={{accountId}}&action=WITHDRAW&outcome=REJECTED",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit"
+              ],
+              "query": [
+                {
+                  "key": "accountId",
+                  "value": "{{accountId}}"
+                },
+                {
+                  "key": "action",
+                  "value": "WITHDRAW"
+                },
+                {
+                  "key": "outcome",
+                  "value": "REJECTED"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const event = pm.response.json().content[0];",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Recorded as rejected', () => pm.expect(event.outcome).to.eql('REJECTED'));",
+                  "pm.test('Says why', () => pm.expect(event.reason).to.include('Insufficient funds'));",
+                  "pm.test('Records who (until login: the caller address)', () => pm.expect(event.actor).to.match(/^anonymous@/));",
+                  "pm.test('Nothing was created', () => pm.expect(event.transactionIds).to.be.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Premium without threshold (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/premium",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "premium"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Names the missing parameter', () => pm.expect(pm.response.json().message).to.include('threshold'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Premium with zero threshold (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/premium?threshold=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "premium"
+              ],
+              "query": [
+                {
+                  "key": "threshold",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit with unknown outcome (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit?outcome=MAYBE",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit"
+              ],
+              "query": [
+                {
+                  "key": "outcome",
+                  "value": "MAYBE"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit event not found (404)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit/999999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit",
+                "999999999"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Balances unchanged after failed requests",
           "request": {
             "method": "GET",
@@ -2312,6 +2640,47 @@
           ]
         },
         {
+          "name": "Audit: Account Deletion Was Recorded",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit?accountId={{accountId}}&action=ACCOUNT_DELETED",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit"
+              ],
+              "query": [
+                {
+                  "key": "accountId",
+                  "value": "{{accountId}}"
+                },
+                {
+                  "key": "action",
+                  "value": "ACCOUNT_DELETED"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const events = pm.response.json().content; // newest first",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('The deletion succeeded and was recorded', () => pm.expect(events[0].outcome).to.eql('SUCCESS'));",
+                  "// The earlier event is the refused attempt from 'Delete account with money in it (409)'",
+                  "pm.test('The earlier refused attempt was recorded too, with a reason', () => { pm.expect(events.length).to.eql(2); pm.expect(events[1].outcome).to.eql('REJECTED'); pm.expect(events[1].reason).to.be.a('string').and.not.empty; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Deleted account is gone (404)",
           "request": {
             "method": "GET",
@@ -2362,6 +2731,47 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status is 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit: User Deletion Was Recorded",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/audit?userId={{userId}}&action=USER_DELETED",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{userId}}"
+                },
+                {
+                  "key": "action",
+                  "value": "USER_DELETED"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const events = pm.response.json().content; // newest first",
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('The deletion succeeded and was recorded', () => pm.expect(events[0].outcome).to.eql('SUCCESS'));",
+                  "// The earlier event is the refused attempt from 'Delete user who still has accounts (409)'",
+                  "pm.test('The earlier refused attempt was recorded too, with a reason', () => { pm.expect(events.length).to.eql(2); pm.expect(events[1].outcome).to.eql('REJECTED'); pm.expect(events[1].reason).to.be.a('string').and.not.empty; });"
                 ]
               }
             }
