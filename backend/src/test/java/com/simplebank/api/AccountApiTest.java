@@ -40,10 +40,10 @@ class AccountApiTest extends MongoTestBase {
 
     @BeforeEach
     void setUp() throws Exception {
-        mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
-        userId = readId(postJson("/api/users", """
-                {"name": "John Doe", "email": "john@example.com", "address": {"street": "100 Main St", "city": "Baltimore", "state": "MD", "zip": "21201"}}
-                """).andExpect(status().isCreated()), "$.userId");
+        mockMvc = adminMockMvc();
+        userId = readId(postJson("/api/auth/register", """
+                {"name": "John Doe", "email": "john@example.com", "password": "Secret123", "address": {"street": "100 Main St", "city": "Baltimore", "state": "MD", "zip": "21201"}}
+                """).andExpect(status().isCreated()), "$.user.userId");
     }
 
     // ----- Create / Read -----

@@ -54,8 +54,6 @@ class SearchTest extends MongoTestBase {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
-
         long alice = user("Alice", "Baltimore", "MD", "21201");
         account(alice, AccountType.SAVINGS, "60");
         account(alice, AccountType.SAVINGS, "60");
@@ -166,7 +164,7 @@ class SearchTest extends MongoTestBase {
 
     @Test
     void searchUsersThroughTheApi() throws Exception {
-        mockMvc.perform(get("/api/users")
+        adminMockMvc().perform(get("/api/users")
                         .param("state", "MD")
                         .param("minBalance", "100")
                         .param("balanceMode", "ANY_ACCOUNT"))
@@ -178,7 +176,7 @@ class SearchTest extends MongoTestBase {
 
     @Test
     void searchAccountsThroughTheApi() throws Exception {
-        mockMvc.perform(get("/api/accounts").param("accountType", "CHECKING"))
+        adminMockMvc().perform(get("/api/accounts").param("accountType", "CHECKING"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(1)))
                 .andExpect(jsonPath("$.content[0].userName").value("Bob"));
@@ -186,14 +184,14 @@ class SearchTest extends MongoTestBase {
 
     @Test
     void invalidBalanceModeReturns400() throws Exception {
-        mockMvc.perform(get("/api/users").param("balanceMode", "SOMETIMES"))
+        adminMockMvc().perform(get("/api/users").param("balanceMode", "SOMETIMES"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", containsString("balanceMode")));
     }
 
     @Test
     void minGreaterThanMaxReturns400() throws Exception {
-        mockMvc.perform(get("/api/accounts").param("minBalance", "500").param("maxBalance", "100"))
+        adminMockMvc().perform(get("/api/accounts").param("minBalance", "500").param("maxBalance", "100"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("minBalance cannot be greater than maxBalance"));
     }

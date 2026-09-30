@@ -99,6 +99,7 @@ class MongoRulesAndConcurrencyTest extends MongoTestBase {
                 .append("email", "jane@example.com")
                 .append("address", new Document("street", "1 Main St").append("city", "Baltimore")
                         .append("state", "MD").append("zip", "21201"))
+                .append("role", "CUSTOMER")
                 .append("createdAt", new Date())))
                 .isInstanceOf(MongoWriteException.class)
                 .hasMessageContaining("E11000"); // MongoDB's "duplicate key" error code

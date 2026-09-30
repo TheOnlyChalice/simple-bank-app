@@ -70,7 +70,7 @@ class PremiumAccountsTest extends MongoTestBase {
 
     @Test
     void apiReturnsPremiumAccountsAndValidatesTheThreshold() throws Exception {
-        MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
+        MockMvc mockMvc = adminMockMvc();
 
         mockMvc.perform(get("/api/accounts/premium").param("threshold", "1000"))
                 .andExpect(status().isOk())

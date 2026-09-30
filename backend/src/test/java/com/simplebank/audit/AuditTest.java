@@ -178,8 +178,8 @@ class AuditTest extends MongoTestBase {
     // ----- Through the API -----
 
     @Test
-    void apiRecordsTheCallersAddressAndSearchesByOutcome() throws Exception {
-        MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
+    void apiRecordsTheLoggedInCallerAndSearchesByOutcome() throws Exception {
+        MockMvc mockMvc = adminMockMvc();
 
         mockMvc.perform(post("/api/accounts/" + accountId + "/withdraw")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -191,13 +191,13 @@ class AuditTest extends MongoTestBase {
                         .param("outcome", "REJECTED"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].action").value("WITHDRAW"))
-                .andExpect(jsonPath("$.content[0].actor").value("anonymous@127.0.0.1"))
+                .andExpect(jsonPath("$.content[0].actor", containsString("(user ")))
                 .andExpect(jsonPath("$.content[0].reason", containsString("Insufficient funds")));
     }
 
     @Test
     void apiTracesATransactionAndRejectsBadFilters() throws Exception {
-        MockMvc mockMvc = MockMvcBuilders.webAppContextSetup(context).build();
+        MockMvc mockMvc = adminMockMvc();
         accountService.deposit(accountId, new BigDecimal("25"));
         long txnId = accountService.getTransactions(accountId, 0, 1).content().get(0).txnId();
 
