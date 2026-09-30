@@ -22,7 +22,7 @@ Each step has its own branch, and each branch builds on the one before it.
 | 1. Backend without database | `step-1-backend-no-db` | Done |
 | 2. Backend with a database (MongoDB Atlas) | `step-2-backend-db` | Done |
 | 3. JWT authentication | `step-3-backend-jwt` | Done |
-| 4. React frontend | `step-4-react-frontend` | Not started |
+| 4. React frontend | `step-4-react-frontend` | Done |
 | 5. Deploy to AWS | `step-5-aws-deploy` | Not started |
 
 Step 2 was first built on MySQL and then moved to MongoDB Atlas. The MySQL version
@@ -130,6 +130,39 @@ Swagger UI: http://localhost:8080/swagger-ui.html. Log in with `POST /api/auth/l
 the app applies at startup. It can be run with mongosh:
 
     mongosh "$MONGODB_URI" database/mongo-setup.js
+
+## Frontend
+
+Requirements: **Node.js 20+**. The backend must be running first (see Setup, above).
+
+    cd frontend
+    npm install
+    npm run dev        # starts on http://localhost:5173
+
+By default the app talks to the backend at `http://localhost:8080`. To change that, copy
+`.env.example` to `.env.local` and edit `VITE_API_URL`.
+
+**Pages:**
+
+| Page | Route | Notes |
+|---|---|---|
+| Welcome / dashboard | `/` | Marketing page when logged out; your accounts when logged in |
+| Create account | `/create-account` | Registers a customer and opens their first account |
+| Log in | `/login` | |
+| Open an account | `/accounts/new` | For a customer who already has one |
+| Account details | `/accounts/:accountId` | Balance, recent activity, and account settings (change type, close) |
+| Deposit / Withdraw | `/accounts/:accountId/deposit`, `/.../withdraw` | |
+| Transactions | `/accounts/:accountId/transactions` | Full, paginated history |
+| Transfer | `/transfer` | From one of your accounts to any account |
+| Profile | `/profile` | Edit name, email, and address, or close your profile |
+| Customers (admin) | `/admin/users` | Search and browse every customer |
+| Customer details (admin) | `/admin/users/:userId` | One customer's profile and accounts |
+| Accounts (admin) | `/admin/accounts` | Search every account, or list premium accounts |
+| Audit log (admin) | `/admin/audit` | Search the audit trail |
+
+Customers can only reach their own profile and accounts; admins land on `/admin/users` after
+logging in and can reach everything. The token is kept in `localStorage` and cleared on
+logout or expiry (see `src/auth/AuthContext.jsx`).
 
 ## Rules enforced by MongoDB itself
 
