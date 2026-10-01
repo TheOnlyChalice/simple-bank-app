@@ -5,6 +5,7 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { useToast } from '../toast/ToastContext';
 import { accounts, users } from '../api/bank';
 import Alert from '../components/Alert';
+import FeatureIcon from '../components/FeatureIcon';
 import FormField from '../components/FormField';
 import Spinner from '../components/Spinner';
 import { formatAccountType, formatMoney } from '../components/format';
@@ -50,37 +51,49 @@ export default function TransferPage() {
   const { errors, bind } = form;
 
   return (
-    <div className="narrow">
-      <h1>{t('transfer.title')}</h1>
-      <Alert>{loadError}</Alert>
-      <Alert>{form.message}</Alert>
+    <div className="split-layout">
+      <div className="narrow">
+        <h1>{t('transfer.title')}</h1>
+        <Alert>{loadError}</Alert>
+        <Alert>{form.message}</Alert>
 
-      {myAccounts === null && !loadError && <Spinner label={t('transfer.loading')} />}
+        {myAccounts === null && !loadError && <Spinner label={t('transfer.loading')} />}
 
-      {myAccounts?.length === 0 && (
-        <div className="panel empty">
-          <p className="muted">{t('transfer.noAccounts')}</p>
-        </div>
-      )}
+        {myAccounts?.length === 0 && (
+          <div className="panel empty">
+            <p className="muted">{t('transfer.noAccounts')}</p>
+          </div>
+        )}
 
-      {myAccounts?.length > 0 && (
-        <form className="panel stack" onSubmit={handleSubmit} noValidate>
-          <FormField label={t('transfer.fromAccount')} as="select" error={errors.fromAccountId} {...bind('fromAccountId')}>
-            {myAccounts.map((account) => (
-              <option key={account.accountId} value={account.accountId}>
-                {formatAccountType(account.accountType, t)} #{account.accountId} — {formatMoney(account.balance)}
-              </option>
-            ))}
-          </FormField>
-          <FormField label={t('transfer.toAccountId')} type="number" inputMode="numeric"
-            error={errors.toAccountId} {...bind('toAccountId')} />
-          <FormField label={t('transfer.amount')} type="number" step="0.01" min="0.01" inputMode="decimal"
-            error={errors.amount} {...bind('amount')} />
-          <button type="submit" className="button" disabled={form.submitting}>
-            {form.submitting ? t('transfer.submitting') : t('transfer.submit')}
-          </button>
-        </form>
-      )}
+        {myAccounts?.length > 0 && (
+          <form className="panel stack" onSubmit={handleSubmit} noValidate>
+            <FormField label={t('transfer.fromAccount')} as="select" error={errors.fromAccountId} {...bind('fromAccountId')}>
+              {myAccounts.map((account) => (
+                <option key={account.accountId} value={account.accountId}>
+                  {formatAccountType(account.accountType, t)} #{account.accountId} — {formatMoney(account.balance)}
+                </option>
+              ))}
+            </FormField>
+            <FormField label={t('transfer.toAccountId')} type="number" inputMode="numeric"
+              error={errors.toAccountId} {...bind('toAccountId')} />
+            <FormField label={t('transfer.amount')} type="number" step="0.01" min="0.01" inputMode="decimal"
+              error={errors.amount} {...bind('amount')} />
+            <button type="submit" className="button" disabled={form.submitting}>
+              {form.submitting ? t('transfer.submitting') : t('transfer.submit')}
+            </button>
+          </form>
+        )}
+      </div>
+
+      <div className="panel aside-panel">
+        <FeatureIcon kind="transfer" />
+        <h2>{t('transfer.aside.title')}</h2>
+        <ul className="feature-list">
+          <li>{t('transfer.aside.point1')}</li>
+          <li>{t('transfer.aside.point2')}</li>
+          <li>{t('transfer.aside.point3')}</li>
+        </ul>
+      </div>
     </div>
   );
 }

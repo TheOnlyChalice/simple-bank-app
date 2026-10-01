@@ -88,6 +88,10 @@ export const translations = {
     'openAccount.submit': 'Open account',
     'openAccount.cancel': 'Cancel',
     'openAccount.notice': 'Your new account is open.',
+    'openAccount.aside.title': 'Why open another account',
+    'openAccount.aside.point1': 'Ready to use in under a minute',
+    'openAccount.aside.point2': 'No minimum balance to get started',
+    'openAccount.aside.point3': 'Switch between savings and checking anytime',
 
     // Account details page
     'account.savingsAccount': 'Savings account',
@@ -136,6 +140,10 @@ export const translations = {
     'transfer.submitting': 'Transferring…',
     'transfer.submit': 'Transfer',
     'transfer.notice': 'Transferred {amount} to account #{id}.',
+    'transfer.aside.title': 'Moving money safely',
+    'transfer.aside.point1': 'Funds move between accounts instantly',
+    'transfer.aside.point2': 'Every transfer is recorded in your history',
+    'transfer.aside.point3': 'Transfers can only be sent from your own accounts',
 
     // Transactions page
     'transactions.title': 'Transactions',
@@ -161,6 +169,10 @@ export const translations = {
     'profile.closing': 'Closing…',
     'profile.closeConfirm': 'Close your profile? This cannot be undone.',
     'profile.closedNotice': 'Your profile has been closed.',
+    'profile.aside.title': 'Your information, protected',
+    'profile.aside.point1': 'Your data is encrypted and never shared',
+    'profile.aside.point2': 'Only you can view or edit your profile',
+    'profile.aside.point3': 'Update your address anytime, for free',
 
     // Not found page
     'notFound.title': 'Page not found',
@@ -350,6 +362,10 @@ export const translations = {
     'openAccount.submit': 'Abrir cuenta',
     'openAccount.cancel': 'Cancelar',
     'openAccount.notice': 'Tu nueva cuenta está abierta.',
+    'openAccount.aside.title': 'Por qué abrir otra cuenta',
+    'openAccount.aside.point1': 'Lista para usar en menos de un minuto',
+    'openAccount.aside.point2': 'Sin saldo mínimo para empezar',
+    'openAccount.aside.point3': 'Cambia entre ahorros y corriente cuando quieras',
 
     // Account details page
     'account.savingsAccount': 'Cuenta de ahorros',
@@ -398,6 +414,10 @@ export const translations = {
     'transfer.submitting': 'Transfiriendo…',
     'transfer.submit': 'Transferir',
     'transfer.notice': 'Transferiste {amount} a la cuenta #{id}.',
+    'transfer.aside.title': 'Moviendo tu dinero de forma segura',
+    'transfer.aside.point1': 'El dinero se mueve entre cuentas al instante',
+    'transfer.aside.point2': 'Cada transferencia queda registrada en tu historial',
+    'transfer.aside.point3': 'Las transferencias solo pueden salir de tus propias cuentas',
 
     // Transactions page
     'transactions.title': 'Transacciones',
@@ -423,6 +443,10 @@ export const translations = {
     'profile.closing': 'Cerrando…',
     'profile.closeConfirm': '¿Cerrar tu perfil? Esto no se puede deshacer.',
     'profile.closedNotice': 'Tu perfil ha sido cerrado.',
+    'profile.aside.title': 'Tu información, protegida',
+    'profile.aside.point1': 'Tus datos están cifrados y nunca se comparten',
+    'profile.aside.point2': 'Solo tú puedes ver o editar tu perfil',
+    'profile.aside.point3': 'Actualiza tu dirección cuando quieras, sin costo',
 
     // Not found page
     'notFound.title': 'Página no encontrada',

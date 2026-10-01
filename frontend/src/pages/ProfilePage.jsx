@@ -5,6 +5,7 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { useToast } from '../toast/ToastContext';
 import { users } from '../api/bank';
 import Alert from '../components/Alert';
+import FeatureIcon from '../components/FeatureIcon';
 import FormField from '../components/FormField';
 import { useConfirm } from '../components/useConfirm';
 import { useForm } from '../components/useForm';
@@ -65,43 +66,55 @@ export default function ProfilePage() {
   const { errors, bind } = form;
 
   return (
-    <div className="narrow wide stack-lg">
-      {dialog}
-      <h1>{t('profile.title')}</h1>
+    <div className="split-layout">
+      <div className="narrow wide stack-lg">
+        {dialog}
+        <h1>{t('profile.title')}</h1>
 
-      <Alert>{form.message}</Alert>
+        <Alert>{form.message}</Alert>
 
-      <form className="panel stack" onSubmit={handleSubmit} noValidate>
-        <FormField label={t('profile.name')} autoComplete="name" error={errors.name} {...bind('name')} />
-        <FormField label={t('profile.email')} type="email" autoComplete="email" error={errors.email} {...bind('email')} />
+        <form className="panel stack" onSubmit={handleSubmit} noValidate>
+          <FormField label={t('profile.name')} autoComplete="name" error={errors.name} {...bind('name')} />
+          <FormField label={t('profile.email')} type="email" autoComplete="email" error={errors.email} {...bind('email')} />
 
-        <fieldset className="stack">
-          <legend>{t('profile.address')}</legend>
-          <FormField label={t('profile.street')} autoComplete="street-address" error={errors['address.street']}
-            {...bind('address.street')} />
-          <div className="row">
-            <FormField label={t('profile.city')} autoComplete="address-level2" error={errors['address.city']}
-              {...bind('address.city')} />
-            <FormField label={t('profile.state')} autoComplete="address-level1" maxLength={2} hint={t('profile.stateHint')}
-              error={errors['address.state']} {...bind('address.state')} />
-            <FormField label={t('profile.zip')} autoComplete="postal-code" inputMode="numeric"
-              error={errors['address.zip']} {...bind('address.zip')} />
-          </div>
-        </fieldset>
+          <fieldset className="stack">
+            <legend>{t('profile.address')}</legend>
+            <FormField label={t('profile.street')} autoComplete="street-address" error={errors['address.street']}
+              {...bind('address.street')} />
+            <div className="row">
+              <FormField label={t('profile.city')} autoComplete="address-level2" error={errors['address.city']}
+                {...bind('address.city')} />
+              <FormField label={t('profile.state')} autoComplete="address-level1" maxLength={2} hint={t('profile.stateHint')}
+                error={errors['address.state']} {...bind('address.state')} />
+              <FormField label={t('profile.zip')} autoComplete="postal-code" inputMode="numeric"
+                error={errors['address.zip']} {...bind('address.zip')} />
+            </div>
+          </fieldset>
 
-        <button type="submit" className="button" disabled={form.submitting}>
-          {form.submitting ? t('profile.saving') : t('profile.save')}
-        </button>
-      </form>
+          <button type="submit" className="button" disabled={form.submitting}>
+            {form.submitting ? t('profile.saving') : t('profile.save')}
+          </button>
+        </form>
 
-      <section className="panel stack">
-        <h2>{t('profile.closeTitle')}</h2>
-        <p className="muted">{t('profile.closeBody')}</p>
-        <Alert>{deleteError}</Alert>
-        <button type="button" className="button danger" onClick={handleDelete} disabled={deleting}>
-          {deleting ? t('profile.closing') : t('profile.closeSubmit')}
-        </button>
-      </section>
+        <section className="panel stack">
+          <h2>{t('profile.closeTitle')}</h2>
+          <p className="muted">{t('profile.closeBody')}</p>
+          <Alert>{deleteError}</Alert>
+          <button type="button" className="button danger" onClick={handleDelete} disabled={deleting}>
+            {deleting ? t('profile.closing') : t('profile.closeSubmit')}
+          </button>
+        </section>
+      </div>
+
+      <div className="panel aside-panel">
+        <FeatureIcon kind="profile" />
+        <h2>{t('profile.aside.title')}</h2>
+        <ul className="feature-list">
+          <li>{t('profile.aside.point1')}</li>
+          <li>{t('profile.aside.point2')}</li>
+          <li>{t('profile.aside.point3')}</li>
+        </ul>
+      </div>
     </div>
   );
 }

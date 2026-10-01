@@ -21,7 +21,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="auth-layout">
+    <div className="split-layout">
       <div className="narrow">
         <h1>{t('login.title')}</h1>
         {sessionExpired && <Alert kind="info">{t('login.sessionExpired')}</Alert>}
@@ -39,9 +39,9 @@ export default function LoginPage() {
         <p className="muted">{t('login.newHere')} <Link to="/create-account">{t('login.createAccount')}</Link></p>
       </div>
 
-      <div className="panel auth-aside">
+      <div className="panel aside-panel">
         <BrandMark showWordmark />
-        <ul className="auth-points">
+        <ul className="feature-list">
           <li>{t('login.aside.point1')}</li>
           <li>{t('login.aside.point2')}</li>
           <li>{t('login.aside.point3')}</li>
