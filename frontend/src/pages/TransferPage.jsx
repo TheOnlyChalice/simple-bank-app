@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
+import { useLanguage } from '../i18n/LanguageContext';
 import { accounts, users } from '../api/bank';
 import Alert from '../components/Alert';
 import FormField from '../components/FormField';
@@ -10,6 +11,7 @@ import { useForm } from '../components/useForm';
 /** Move money from one of your own accounts to any account. */
 export default function TransferPage() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [myAccounts, setMyAccounts] = useState(null);
@@ -38,7 +40,7 @@ export default function TransferPage() {
     const result = await form.submit((v) => accounts.transfer(v.fromAccountId, v.toAccountId, v.amount));
     if (result) {
       navigate(`/accounts/${values.fromAccountId}`, {
-        state: { notice: `Transferred ${formatMoney(result.amount)} to account #${values.toAccountId}.` },
+        state: { notice: t('transfer.notice', { amount: formatMoney(result.amount), id: values.toAccountId }) },
       });
     }
   }
@@ -47,36 +49,37 @@ export default function TransferPage() {
 
   return (
     <div className="narrow">
-      <h1>Transfer</h1>
+      <h1>{t('transfer.title')}</h1>
       <Alert>{loadError}</Alert>
       <Alert>{form.message}</Alert>
 
-      {myAccounts === null && !loadError && <p className="muted">Loading your accounts…</p>}
+      {myAccounts === null && !loadError && <p className="muted">{t('transfer.loading')}</p>}
 
       {myAccounts?.length === 0 && (
         <div className="panel empty">
-          <p className="muted">You don't have an account to transfer from yet.</p>
+          <p className="muted">{t('transfer.noAccounts')}</p>
         </div>
       )}
 
       {myAccounts?.length > 0 && (
         <form className="panel stack" onSubmit={handleSubmit} noValidate>
-          <FormField label="From account" as="select" error={errors.fromAccountId} {...bind('fromAccountId')}>
+          <FormField label={t('transfer.fromAccount')} as="select" error={errors.fromAccountId} {...bind('fromAccountId')}>
             {myAccounts.map((account) => (
               <option key={account.accountId} value={account.accountId}>
-                {formatAccountType(account.accountType)} #{account.accountId} — {formatMoney(account.balance)}
+                {formatAccountType(account.accountType, t)} #{account.accountId} — {formatMoney(account.balance)}
               </option>
             ))}
           </FormField>
-          <FormField label="To account ID" type="number" inputMode="numeric"
+          <FormField label={t('transfer.toAccountId')} type="number" inputMode="numeric"
             error={errors.toAccountId} {...bind('toAccountId')} />
-          <FormField label="Amount" type="number" step="0.01" min="0.01" inputMode="decimal"
+          <FormField label={t('transfer.amount')} type="number" step="0.01" min="0.01" inputMode="decimal"
             error={errors.amount} {...bind('amount')} />
           <button type="submit" className="button" disabled={form.submitting}>
-            {form.submitting ? 'Transferring…' : 'Transfer'}
+            {form.submitting ? t('transfer.submitting') : t('transfer.submit')}
           </button>
         </form>
       )}
     </div>
   );
 }
+

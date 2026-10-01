@@ -1,11 +1,13 @@
 import { Link, Navigate, useLocation } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
+import { useLanguage } from '../i18n/LanguageContext';
 import Alert from '../components/Alert';
 import FormField from '../components/FormField';
 import { useForm } from '../components/useForm';
 
 export default function LoginPage() {
   const { user, login, sessionExpired } = useAuth();
+  const { t } = useLanguage();
   const location = useLocation();
   const form = useForm({ email: '', password: '' });
 
@@ -19,20 +21,21 @@ export default function LoginPage() {
 
   return (
     <div className="narrow">
-      <h1>Log in</h1>
-      {sessionExpired && <Alert kind="info">Your session ended. Log in again to continue.</Alert>}
+      <h1>{t('login.title')}</h1>
+      {sessionExpired && <Alert kind="info">{t('login.sessionExpired')}</Alert>}
       <Alert>{form.message}</Alert>
 
       <form className="panel stack" onSubmit={handleSubmit} noValidate>
-        <FormField label="Email" type="email" autoComplete="email" error={form.errors.email} {...form.bind('email')} />
-        <FormField label="Password" type="password" autoComplete="current-password"
+        <FormField label={t('login.email')} type="email" autoComplete="email" error={form.errors.email} {...form.bind('email')} />
+        <FormField label={t('login.password')} type="password" autoComplete="current-password"
           error={form.errors.password} {...form.bind('password')} />
         <button type="submit" className="button" disabled={form.submitting}>
-          {form.submitting ? 'Logging in…' : 'Log in'}
+          {form.submitting ? t('login.submitting') : t('login.submit')}
         </button>
       </form>
 
-      <p className="muted">New to Simple Bank? <Link to="/create-account">Create an account</Link></p>
+      <p className="muted">{t('login.newHere')} <Link to="/create-account">{t('login.createAccount')}</Link></p>
     </div>
   );
 }
+

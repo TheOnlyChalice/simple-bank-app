@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { users } from '../../api/bank';
+import { useLanguage } from '../../i18n/LanguageContext';
 import Alert from '../../components/Alert';
 import FormField from '../../components/FormField';
 import Pagination from '../../components/Pagination';
-import { formatDate } from '../../components/format';
+import { formatDate, localeFor } from '../../components/format';
 
 const EMPTY_FILTERS = { state: '', city: '', zip: '', minBalance: '', maxBalance: '', balanceMode: 'TOTAL' };
 const PAGE_SIZE = 20;
 
 /** Staff-only: search and browse every customer. */
 export default function AdminUsersPage() {
+  const { t, language } = useLanguage();
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [page, setPage] = useState(0);
   const [pageData, setPageData] = useState(null);
@@ -41,32 +43,32 @@ export default function AdminUsersPage() {
 
   return (
     <div className="stack-lg">
-      <h1>Customers</h1>
+      <h1>{t('adminUsers.title')}</h1>
 
       <form className="panel filters" onSubmit={handleSearch}>
-        <FormField label="State" maxLength={2} id="state" value={filters.state} onChange={handleFilterChange('state')} />
-        <FormField label="City" id="city" value={filters.city} onChange={handleFilterChange('city')} />
-        <FormField label="ZIP code" id="zip" value={filters.zip} onChange={handleFilterChange('zip')} />
-        <FormField label="Min balance" type="number" id="minBalance" value={filters.minBalance}
+        <FormField label={t('adminUsers.state')} maxLength={2} id="state" value={filters.state} onChange={handleFilterChange('state')} />
+        <FormField label={t('adminUsers.city')} id="city" value={filters.city} onChange={handleFilterChange('city')} />
+        <FormField label={t('adminUsers.zip')} id="zip" value={filters.zip} onChange={handleFilterChange('zip')} />
+        <FormField label={t('adminUsers.minBalance')} type="number" id="minBalance" value={filters.minBalance}
           onChange={handleFilterChange('minBalance')} />
-        <FormField label="Max balance" type="number" id="maxBalance" value={filters.maxBalance}
+        <FormField label={t('adminUsers.maxBalance')} type="number" id="maxBalance" value={filters.maxBalance}
           onChange={handleFilterChange('maxBalance')} />
-        <FormField label="Balance mode" as="select" id="balanceMode" value={filters.balanceMode}
+        <FormField label={t('adminUsers.balanceMode')} as="select" id="balanceMode" value={filters.balanceMode}
           onChange={handleFilterChange('balanceMode')}>
-          <option value="TOTAL">Total across accounts</option>
-          <option value="ANY_ACCOUNT">Any single account</option>
+          <option value="TOTAL">{t('adminUsers.balanceMode.total')}</option>
+          <option value="ANY_ACCOUNT">{t('adminUsers.balanceMode.any')}</option>
         </FormField>
         <div className="button-row">
-          <button type="submit" className="button">Search</button>
-          <button type="button" className="button secondary" onClick={handleReset}>Reset</button>
+          <button type="submit" className="button">{t('adminUsers.search')}</button>
+          <button type="button" className="button secondary" onClick={handleReset}>{t('adminUsers.reset')}</button>
         </div>
       </form>
 
       <Alert>{error}</Alert>
 
-      {pageData === null && !error && <p className="muted">Loading customers…</p>}
+      {pageData === null && !error && <p className="muted">{t('adminUsers.loading')}</p>}
 
-      {pageData?.content.length === 0 && <p className="muted">No customers match those filters.</p>}
+      {pageData?.content.length === 0 && <p className="muted">{t('adminUsers.empty')}</p>}
 
       {pageData?.content.length > 0 && (
         <>
@@ -74,11 +76,11 @@ export default function AdminUsersPage() {
             <table className="ledger">
               <thead>
                 <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Email</th>
-                  <th scope="col">Address</th>
-                  <th scope="col">Since</th>
-                  <th scope="col"><span className="visually-hidden">Actions</span></th>
+                  <th scope="col">{t('adminUsers.name')}</th>
+                  <th scope="col">{t('adminUsers.email')}</th>
+                  <th scope="col">{t('adminUsers.address')}</th>
+                  <th scope="col">{t('adminUsers.since')}</th>
+                  <th scope="col"><span className="visually-hidden">{t('adminUsers.view')}</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -87,8 +89,8 @@ export default function AdminUsersPage() {
                     <td>{u.name}</td>
                     <td>{u.email}</td>
                     <td>{u.address ? `${u.address.city}, ${u.address.state}` : '—'}</td>
-                    <td>{formatDate(u.createdAt)}</td>
-                    <td className="actions"><Link to={`/admin/users/${u.userId}`}>View</Link></td>
+                    <td>{formatDate(u.createdAt, localeFor(language))}</td>
+                    <td className="actions"><Link to={`/admin/users/${u.userId}`}>{t('adminUsers.view')}</Link></td>
                   </tr>
                 ))}
               </tbody>
@@ -101,3 +103,4 @@ export default function AdminUsersPage() {
     </div>
   );
 }
+

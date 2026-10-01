@@ -7,18 +7,19 @@ export function formatMoney(value) {
 }
 
 /** Timestamps without a zone (from LocalDateTime) are shown as local time. */
-export function formatDateTime(value) {
+export function formatDateTime(value, locale = 'en-US') {
   if (!value) return '';
-  return new Date(value).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+  return new Date(value).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-export function formatDate(value) {
+export function formatDate(value, locale = 'en-US') {
   if (!value) return '';
-  return new Date(value).toLocaleDateString('en-US', { dateStyle: 'medium' });
+  return new Date(value).toLocaleDateString(locale, { dateStyle: 'medium' });
 }
 
-export function formatAccountType(type) {
-  return type === 'CHECKING' ? 'Checking' : 'Savings';
+export function formatAccountType(type, t) {
+  const key = type === 'CHECKING' ? 'common.checking' : 'common.savings';
+  return t ? t(key) : (type === 'CHECKING' ? 'Checking' : 'Savings');
 }
 
 /** Adds up balances in whole cents, so the total is exact. */
@@ -27,16 +28,16 @@ export function totalBalance(accounts) {
   return cents / 100;
 }
 
-export function describeTransaction(txn) {
+export function describeTransaction(txn, t) {
   switch (txn.type) {
     case 'DEPOSIT':
-      return 'Deposit';
+      return t('txn.deposit');
     case 'WITHDRAW':
-      return 'Withdrawal';
+      return t('txn.withdrawal');
     case 'TRANSFER_IN':
-      return `Transfer from #${txn.relatedAccountId}`;
+      return t('txn.transferFrom', { id: txn.relatedAccountId });
     case 'TRANSFER_OUT':
-      return `Transfer to #${txn.relatedAccountId}`;
+      return t('txn.transferTo', { id: txn.relatedAccountId });
     default:
       return txn.type;
   }
@@ -45,3 +46,9 @@ export function describeTransaction(txn) {
 export function isMoneyIn(txn) {
   return txn.type === 'DEPOSIT' || txn.type === 'TRANSFER_IN';
 }
+
+/** 'es-US' for Spanish date formatting, 'en-US' otherwise. */
+export function localeFor(language) {
+  return language === 'es' ? 'es-US' : 'en-US';
+}
+

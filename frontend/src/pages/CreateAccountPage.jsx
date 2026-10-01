@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
+import { useLanguage } from '../i18n/LanguageContext';
 import { accounts } from '../api/bank';
 import Alert from '../components/Alert';
 import FormField from '../components/FormField';
@@ -12,6 +13,7 @@ import { useForm } from '../components/useForm';
  */
 export default function CreateAccountPage() {
   const { user, register } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const inProgress = useRef(false); // stay on this page while the new account is being opened
   const form = useForm({
@@ -54,12 +56,12 @@ export default function CreateAccountPage() {
       const account = await accounts.create(session.user.userId, form.values.accountType);
       navigate(`/accounts/${account.accountId}`, {
         replace: true,
-        state: { notice: 'Welcome to Simple Bank. Your account is open.' },
+        state: { notice: t('createAccount.welcomeNotice') },
       });
     } catch (error) {
       navigate('/', {
         replace: true,
-        state: { notice: `You're registered, but the account couldn't be opened: ${error.message}` },
+        state: { notice: t('createAccount.failedNotice', { message: error.message }) },
       });
     }
   }
@@ -68,39 +70,40 @@ export default function CreateAccountPage() {
 
   return (
     <div className="narrow wide">
-      <h1>Create account</h1>
-      <p className="muted">Already a customer? <Link to="/login">Log in</Link></p>
+      <h1>{t('createAccount.title')}</h1>
+      <p className="muted">{t('createAccount.alreadyCustomer')} <Link to="/login">{t('createAccount.logIn')}</Link></p>
       <Alert>{form.message}</Alert>
 
       <form className="panel stack" onSubmit={handleSubmit} noValidate>
-        <FormField label="Name" autoComplete="name" error={errors.name} {...bind('name')} />
-        <FormField label="Email" type="email" autoComplete="email" error={errors.email} {...bind('email')} />
-        <FormField label="Password" type="password" autoComplete="new-password"
-          hint="At least 8 characters, with at least one letter and one number."
+        <FormField label={t('createAccount.name')} autoComplete="name" error={errors.name} {...bind('name')} />
+        <FormField label={t('createAccount.email')} type="email" autoComplete="email" error={errors.email} {...bind('email')} />
+        <FormField label={t('createAccount.password')} type="password" autoComplete="new-password"
+          hint={t('createAccount.passwordHint')}
           error={errors.password} {...bind('password')} />
-        <FormField label="Account type" as="select" error={errors.accountType} {...bind('accountType')}>
-          <option value="SAVINGS">Savings</option>
-          <option value="CHECKING">Checking</option>
+        <FormField label={t('createAccount.accountType')} as="select" error={errors.accountType} {...bind('accountType')}>
+          <option value="SAVINGS">{t('createAccount.savings')}</option>
+          <option value="CHECKING">{t('createAccount.checking')}</option>
         </FormField>
 
         <fieldset className="stack">
-          <legend>Address</legend>
-          <FormField label="Street" autoComplete="street-address" error={errors['address.street']}
+          <legend>{t('createAccount.address')}</legend>
+          <FormField label={t('createAccount.street')} autoComplete="street-address" error={errors['address.street']}
             {...bind('address.street')} />
           <div className="row">
-            <FormField label="City" autoComplete="address-level2" error={errors['address.city']}
+            <FormField label={t('createAccount.city')} autoComplete="address-level2" error={errors['address.city']}
               {...bind('address.city')} />
-            <FormField label="State" autoComplete="address-level1" maxLength={2} hint="2 letters, e.g. MD"
+            <FormField label={t('createAccount.state')} autoComplete="address-level1" maxLength={2} hint={t('createAccount.stateHint')}
               error={errors['address.state']} {...bind('address.state')} />
-            <FormField label="ZIP code" autoComplete="postal-code" inputMode="numeric"
+            <FormField label={t('createAccount.zip')} autoComplete="postal-code" inputMode="numeric"
               error={errors['address.zip']} {...bind('address.zip')} />
           </div>
         </fieldset>
 
         <button type="submit" className="button" disabled={form.submitting}>
-          {form.submitting ? 'Creating your account…' : 'Create account'}
+          {form.submitting ? t('createAccount.submitting') : t('createAccount.submit')}
         </button>
       </form>
     </div>
   );
 }
+

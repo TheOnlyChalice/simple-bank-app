@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { useLanguage } from '../i18n/LanguageContext';
 
 /**
  * Form state for every page: the values, the backend's field errors, a general message,
  * and whether it's submitting. bind('email') connects an input to the "email" value.
  */
 export function useForm(initialValues) {
+  const { t } = useLanguage();
   const [values, setValues] = useState(initialValues);
   const [errors, setErrors] = useState({});
   const [message, setMessage] = useState('');
@@ -29,7 +31,7 @@ export function useForm(initialValues) {
     } catch (error) {
       const fieldErrors = error.fieldErrors ?? {};
       setErrors(fieldErrors);
-      setMessage(Object.keys(fieldErrors).length > 0 ? 'Check the highlighted fields.' : error.message);
+      setMessage(Object.keys(fieldErrors).length > 0 ? t('form.checkFields') : error.message);
       return undefined;
     } finally {
       setSubmitting(false);

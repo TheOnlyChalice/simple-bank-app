@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { accounts } from '../api/bank';
+import { useLanguage } from '../i18n/LanguageContext';
 import Alert from '../components/Alert';
 import Pagination from '../components/Pagination';
 import TransactionTable from '../components/TransactionTable';
@@ -11,6 +12,7 @@ const PAGE_SIZE = 10;
 /** The full, paginated transaction history for one account. */
 export default function TransactionsPage() {
   const { accountId } = useParams();
+  const { t } = useLanguage();
   const [account, setAccount] = useState(null);
   const [page, setPage] = useState(0);
   const [pageData, setPageData] = useState(null);
@@ -38,7 +40,7 @@ export default function TransactionsPage() {
     return (
       <div className="narrow stack">
         <Alert>{error}</Alert>
-        <Link to="/">Back to your accounts</Link>
+        <Link to="/">{t('account.backToAccounts')}</Link>
       </div>
     );
   }
@@ -46,12 +48,12 @@ export default function TransactionsPage() {
   return (
     <div className="stack-lg">
       <div className="page-header">
-        <h1>Transactions</h1>
-        <Link to={`/accounts/${accountId}`} className="button secondary">Back to account</Link>
+        <h1>{t('transactions.title')}</h1>
+        <Link to={`/accounts/${accountId}`} className="button secondary">{t('transactions.backToAccount')}</Link>
       </div>
-      {account && <p className="muted">{formatAccountType(account.accountType)} account #{account.accountId}</p>}
+      {account && <p className="muted">{formatAccountType(account.accountType, t)} #{account.accountId}</p>}
 
-      {pageData === null && <p className="muted">Loading transactions…</p>}
+      {pageData === null && <p className="muted">{t('transactions.loading')}</p>}
       {pageData && (
         <>
           <TransactionTable transactions={pageData.content} />
@@ -67,3 +69,4 @@ export default function TransactionsPage() {
     </div>
   );
 }
+

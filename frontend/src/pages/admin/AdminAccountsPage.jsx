@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { accounts } from '../../api/bank';
+import { useLanguage } from '../../i18n/LanguageContext';
 import Alert from '../../components/Alert';
 import FormField from '../../components/FormField';
 import Pagination from '../../components/Pagination';
-import { formatAccountType, formatDate, formatMoney } from '../../components/format';
+import { formatAccountType, formatDate, formatMoney, localeFor } from '../../components/format';
 
 const EMPTY_FILTERS = { minBalance: '', maxBalance: '', accountType: '' };
 const PAGE_SIZE = 20;
 
 /** Staff-only: search every account, or list accounts at or above a balance threshold. */
 export default function AdminAccountsPage() {
+  const { t, language } = useLanguage();
   const [premium, setPremium] = useState(false);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [threshold, setThreshold] = useState('1000');
@@ -42,33 +44,33 @@ export default function AdminAccountsPage() {
 
   return (
     <div className="stack-lg">
-      <h1>Accounts</h1>
+      <h1>{t('adminAccounts.title')}</h1>
 
       <div className="button-row">
         <button type="button" className={`button small ${premium ? 'secondary' : ''}`} onClick={() => togglePremium(false)}>
-          All accounts
+          {t('adminAccounts.all')}
         </button>
         <button type="button" className={`button small ${premium ? '' : 'secondary'}`} onClick={() => togglePremium(true)}>
-          Premium accounts
+          {t('adminAccounts.premium')}
         </button>
       </div>
 
       {!premium && (
         <form className="panel filters" onSubmit={handleSearch}>
-          <FormField label="Min balance" type="number" id="minBalance" value={filters.minBalance}
+          <FormField label={t('adminAccounts.minBalance')} type="number" id="minBalance" value={filters.minBalance}
             onChange={(e) => setFilters((c) => ({ ...c, minBalance: e.target.value }))} />
-          <FormField label="Max balance" type="number" id="maxBalance" value={filters.maxBalance}
+          <FormField label={t('adminAccounts.maxBalance')} type="number" id="maxBalance" value={filters.maxBalance}
             onChange={(e) => setFilters((c) => ({ ...c, maxBalance: e.target.value }))} />
-          <FormField label="Account type" as="select" id="accountType" value={filters.accountType}
+          <FormField label={t('adminAccounts.accountType')} as="select" id="accountType" value={filters.accountType}
             onChange={(e) => setFilters((c) => ({ ...c, accountType: e.target.value }))}>
-            <option value="">Any</option>
-            <option value="SAVINGS">Savings</option>
-            <option value="CHECKING">Checking</option>
+            <option value="">{t('adminAccounts.any')}</option>
+            <option value="SAVINGS">{t('adminAccounts.savings')}</option>
+            <option value="CHECKING">{t('adminAccounts.checking')}</option>
           </FormField>
           <div className="button-row">
-            <button type="submit" className="button">Search</button>
+            <button type="submit" className="button">{t('adminAccounts.search')}</button>
             <button type="button" className="button secondary" onClick={() => { setFilters(EMPTY_FILTERS); setPage(0); }}>
-              Reset
+              {t('adminAccounts.reset')}
             </button>
           </div>
         </form>
@@ -76,16 +78,16 @@ export default function AdminAccountsPage() {
 
       {premium && (
         <form className="panel filters" onSubmit={handleSearch}>
-          <FormField label="Balance at or above" type="number" id="threshold" value={threshold}
+          <FormField label={t('adminAccounts.threshold')} type="number" id="threshold" value={threshold}
             onChange={(e) => setThreshold(e.target.value)} />
-          <button type="submit" className="button">Search</button>
+          <button type="submit" className="button">{t('adminAccounts.search')}</button>
         </form>
       )}
 
       <Alert>{error}</Alert>
 
-      {pageData === null && !error && <p className="muted">Loading accounts…</p>}
-      {pageData?.content.length === 0 && <p className="muted">No accounts match those filters.</p>}
+      {pageData === null && !error && <p className="muted">{t('adminAccounts.loading')}</p>}
+      {pageData?.content.length === 0 && <p className="muted">{t('adminAccounts.empty')}</p>}
 
       {pageData?.content.length > 0 && (
         <>
@@ -93,21 +95,21 @@ export default function AdminAccountsPage() {
             <table className="ledger">
               <thead>
                 <tr>
-                  <th scope="col">Account</th>
-                  <th scope="col">Owner</th>
-                  <th scope="col">Opened</th>
-                  <th scope="col" className="num">Balance</th>
-                  <th scope="col"><span className="visually-hidden">Actions</span></th>
+                  <th scope="col">{t('adminAccounts.account')}</th>
+                  <th scope="col">{t('adminAccounts.owner')}</th>
+                  <th scope="col">{t('adminAccounts.opened')}</th>
+                  <th scope="col" className="num">{t('adminAccounts.balance')}</th>
+                  <th scope="col"><span className="visually-hidden">{t('adminAccounts.view')}</span></th>
                 </tr>
               </thead>
               <tbody>
                 {pageData.content.map((account) => (
                   <tr key={account.accountId}>
-                    <td>{formatAccountType(account.accountType)} #{account.accountId}</td>
+                    <td>{formatAccountType(account.accountType, t)} #{account.accountId}</td>
                     <td>{account.userName}</td>
-                    <td>{formatDate(account.createdAt)}</td>
+                    <td>{formatDate(account.createdAt, localeFor(language))}</td>
                     <td className="num">{formatMoney(account.balance)}</td>
-                    <td className="actions"><Link to={`/accounts/${account.accountId}`}>View</Link></td>
+                    <td className="actions"><Link to={`/accounts/${account.accountId}`}>{t('adminAccounts.view')}</Link></td>
                   </tr>
                 ))}
               </tbody>
@@ -120,3 +122,4 @@ export default function AdminAccountsPage() {
     </div>
   );
 }
+
