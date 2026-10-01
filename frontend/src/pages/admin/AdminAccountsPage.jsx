@@ -110,7 +110,10 @@ export default function AdminAccountsPage() {
               <tbody>
                 {pageData.content.map((account) => (
                   <tr key={account.accountId}>
-                    <td>{formatAccountType(account.accountType, t)} #{account.accountId}</td>
+                    <td>
+                      {formatAccountType(account.accountType, t)} #{account.accountId}
+                      {account.frozen && <span className="badge frozen">{t('account.frozenBadge')}</span>}
+                    </td>
                     <td>{account.userName}</td>
                     <td>{formatDate(account.createdAt, localeFor(language))}</td>
                     <td className="num">{formatMoney(account.balance)}</td>

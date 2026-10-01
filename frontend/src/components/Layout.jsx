@@ -49,6 +49,7 @@ export default function Layout() {
               <>
                 <NavLink to="/admin/users" onClick={() => setMenuOpen(false)}>{t('nav.customers')}</NavLink>
                 <NavLink to="/admin/accounts" onClick={() => setMenuOpen(false)}>{t('nav.accounts')}</NavLink>
+                <NavLink to="/transfers/scheduled" onClick={() => setMenuOpen(false)}>{t('nav.scheduled')}</NavLink>
                 <NavLink to="/admin/audit" onClick={() => setMenuOpen(false)}>{t('nav.auditLog')}</NavLink>
               </>
             )}

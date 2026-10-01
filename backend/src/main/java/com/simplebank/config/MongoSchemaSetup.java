@@ -63,7 +63,10 @@ public class MongoSchemaSetup implements ApplicationRunner {
                 "userId":      { "bsonType": "long" },
                 "balance":     { "bsonType": "decimal", "minimum": 0 },
                 "accountType": { "enum": ["SAVINGS", "CHECKING"] },
-                "createdAt":   { "bsonType": "date" }
+                "createdAt":   { "bsonType": "date" },
+                "frozen":      { "bsonType": "bool" },
+                "frozenBy":    { "enum": ["CUSTOMER", "ADMIN"] },
+                "frozenAt":    { "bsonType": "date" }
               }
             }
             """;
@@ -105,7 +108,9 @@ public class MongoSchemaSetup implements ApplicationRunner {
                 "actor":            { "bsonType": "string", "minLength": 1 },
                 "action":           { "enum": ["USER_CREATED", "USER_UPDATED", "USER_DELETED",
                                                "ACCOUNT_CREATED", "ACCOUNT_UPDATED", "ACCOUNT_DELETED",
+                                               "ACCOUNT_FROZEN", "ACCOUNT_UNFROZEN",
                                                "DEPOSIT", "WITHDRAW", "TRANSFER",
+                                               "TRANSFER_SCHEDULED", "SCHEDULED_TRANSFER_CANCELLED",
                                                "LOGIN", "ACCESS_DENIED"] },
                 "outcome":          { "enum": ["SUCCESS", "REJECTED", "FAILED"] },
                 "reason":           { "bsonType": "string" },
@@ -123,6 +128,31 @@ public class MongoSchemaSetup implements ApplicationRunner {
             }
             """;
 
+    /** Transfers to run later. Anything FAILED must say why (failureReason). */
+    static final String SCHEDULED_TRANSFERS_SCHEMA = """
+            {
+              "bsonType": "object",
+              "required": ["_id", "ownerUserId", "fromAccountId", "toAccountId", "amount",
+                           "scheduledFor", "status", "createdAt"],
+              "properties": {
+                "_id":           { "bsonType": "long" },
+                "ownerUserId":   { "bsonType": "long" },
+                "fromAccountId": { "bsonType": "long" },
+                "toAccountId":   { "bsonType": "long" },
+                "amount":        { "bsonType": "decimal", "minimum": 0, "exclusiveMinimum": true },
+                "scheduledFor":  { "bsonType": "date" },
+                "status":        { "enum": ["PENDING", "COMPLETED", "FAILED", "CANCELLED"] },
+                "createdAt":     { "bsonType": "date" },
+                "processedAt":   { "bsonType": "date" },
+                "failureReason": { "bsonType": "string" }
+              },
+              "anyOf": [
+                { "properties": { "status": { "enum": ["PENDING", "COMPLETED", "CANCELLED"] } } },
+                { "required": ["failureReason"] }
+              ]
+            }
+            """;
+
     private final MongoTemplate mongoTemplate;
 
     public MongoSchemaSetup(MongoTemplate mongoTemplate) {
@@ -135,6 +165,7 @@ public class MongoSchemaSetup implements ApplicationRunner {
         applyRules("accounts", ACCOUNTS_SCHEMA);
         applyRules("transactions", TRANSACTIONS_SCHEMA);
         applyRules("audit_log", AUDIT_SCHEMA);
+        applyRules("scheduled_transfers", SCHEDULED_TRANSFERS_SCHEMA);
     }
 
     private void applyRules(String collection, String schemaJson) {

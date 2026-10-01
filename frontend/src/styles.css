@@ -14,6 +14,8 @@
   --credit-tint: #e6f2eb;
   --debit: #a23b2a;
   --debit-tint: #f8e9e6;
+  --frost: #2f5f8f;        /* frozen accounts */
+  --frost-tint: #e6eef7;
   --radius: 6px;
 
   font-family: 'Public Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -39,6 +41,8 @@
   --credit-tint: #163626;
   --debit: #e2685a;
   --debit-tint: #3a1c17;
+  --frost: #8fb8e3;
+  --frost-tint: #1a2a3c;
   color-scheme: dark;
 }
 
@@ -173,7 +177,7 @@ legend { font-weight: 600; padding: 0 0.25rem; }
 
 /* ----- Ledger tables ----- */
 
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; position: relative; } /* relative: keeps hidden header text inside the scroll box on phones */
 .ledger {
   width: 100%; border-collapse: collapse; background: var(--surface);
   border: 1px solid var(--rule); border-radius: var(--radius);
@@ -292,3 +296,23 @@ legend { font-weight: 600; padding: 0 0.25rem; }
   .spinner { animation-duration: 1.5s; }
   .toast { animation: none; }
 }
+
+/* ----- Frozen accounts ----- */
+
+.badge.frozen { background: var(--frost-tint); color: var(--frost); margin-left: 0.5rem; vertical-align: middle; }
+.title-badge { font-size: 0.875rem; }
+.alert.frozen { background: var(--frost-tint); border-color: var(--frost); }
+.alert.frozen p { margin: 0.25rem 0 0; }
+.setting-group { border-top: 1px solid var(--rule); padding-top: 1rem; }
+.setting-group h3 { font-size: 1rem; margin: 0; }
+
+/* ----- Scheduled transfers ----- */
+
+.choice-group { display: flex; gap: 1.25rem; flex-wrap: wrap; }
+.choice { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 500; cursor: pointer; }
+.choice input { width: 1.125rem; height: 1.125rem; accent-color: var(--harbor); margin: 0; }
+.status-filter { max-width: 220px; }
+.small-note { font-size: 0.8125rem; margin-top: 0.25rem; white-space: normal; }
+.ledger td.nowrap { white-space: nowrap; }
+.after-panel { margin-top: 1rem; }
+.badge.muted-badge { background: var(--rule); color: var(--muted); }

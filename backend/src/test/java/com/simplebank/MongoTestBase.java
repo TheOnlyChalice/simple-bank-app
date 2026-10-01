@@ -108,7 +108,7 @@ public abstract class MongoTestBase {
 
     @BeforeEach
     protected void emptyCollections() {
-        for (String collection : List.of("users", "accounts", "transactions", "audit_log")) {
+        for (String collection : List.of("users", "accounts", "transactions", "audit_log", "scheduled_transfers")) {
             mongoTemplate.remove(new Query(), collection);
         }
     }

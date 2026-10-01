@@ -86,7 +86,10 @@ function Dashboard({ user }) {
             <tbody>
               {myAccounts.map((account) => (
                 <tr key={account.accountId}>
-                  <td>{formatAccountType(account.accountType, t)} #{account.accountId}</td>
+                  <td>
+                    {formatAccountType(account.accountType, t)} #{account.accountId}
+                    {account.frozen && <span className="badge frozen">{t('account.frozenBadge')}</span>}
+                  </td>
                   <td>{formatDate(account.createdAt, localeFor(language))}</td>
                   <td className="num">{formatMoney(account.balance)}</td>
                   <td className="actions">

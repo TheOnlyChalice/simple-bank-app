@@ -33,6 +33,14 @@ public class Account {
 
     private LocalDateTime createdAt;
 
+    /** A frozen account can't receive or send money until it is unfrozen. */
+    private boolean frozen;
+
+    /** Who froze it: a CUSTOMER can undo their own freeze; a freeze by the bank (ADMIN) needs staff. */
+    private Role frozenBy;
+
+    private LocalDateTime frozenAt;
+
     public Account() {
     }
 
@@ -57,4 +65,20 @@ public class Account {
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public boolean isFrozen() { return frozen; }
+    public Role getFrozenBy() { return frozenBy; }
+    public LocalDateTime getFrozenAt() { return frozenAt; }
+
+    public void freeze(Role by) {
+        this.frozen = true;
+        this.frozenBy = by;
+        this.frozenAt = LocalDateTime.now();
+    }
+
+    public void unfreeze() {
+        this.frozen = false;
+        this.frozenBy = null;
+        this.frozenAt = null;
+    }
 }

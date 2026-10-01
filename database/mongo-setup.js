@@ -44,7 +44,10 @@ const rules = {
       userId:      { bsonType: "long" },
       balance:     { bsonType: "decimal", minimum: 0 },                 // like CHECK (balance >= 0)
       accountType: { enum: ["SAVINGS", "CHECKING"] },
-      createdAt:   { bsonType: "date" }
+      createdAt:   { bsonType: "date" },
+      frozen:      { bsonType: "bool" },                               // no money moves while frozen
+      frozenBy:    { enum: ["CUSTOMER", "ADMIN"] },                    // only staff can lift a bank freeze
+      frozenAt:    { bsonType: "date" }
     }
   },
 
@@ -79,7 +82,9 @@ const rules = {
       actor:            { bsonType: "string", minLength: 1 },           // who
       action:           { enum: ["USER_CREATED", "USER_UPDATED", "USER_DELETED",
                                  "ACCOUNT_CREATED", "ACCOUNT_UPDATED", "ACCOUNT_DELETED",
+                                 "ACCOUNT_FROZEN", "ACCOUNT_UNFROZEN",
                                  "DEPOSIT", "WITHDRAW", "TRANSFER",
+                                 "TRANSFER_SCHEDULED", "SCHEDULED_TRANSFER_CANCELLED",
                                  "LOGIN", "ACCESS_DENIED"] },
       outcome:          { enum: ["SUCCESS", "REJECTED", "FAILED"] },
       reason:           { bsonType: "string" },
@@ -94,6 +99,28 @@ const rules = {
     anyOf: [
       { properties: { outcome: { enum: ["SUCCESS"] } } },
       { required: ["reason"] }
+    ]
+  },
+
+  // Transfers to run at a future date and time. Anything FAILED must say why.
+  scheduled_transfers: {
+    bsonType: "object",
+    required: ["_id", "ownerUserId", "fromAccountId", "toAccountId", "amount", "scheduledFor", "status", "createdAt"],
+    properties: {
+      _id:           { bsonType: "long" },
+      ownerUserId:   { bsonType: "long" },
+      fromAccountId: { bsonType: "long" },
+      toAccountId:   { bsonType: "long" },
+      amount:        { bsonType: "decimal", minimum: 0, exclusiveMinimum: true },
+      scheduledFor:  { bsonType: "date" },                                 // UTC
+      status:        { enum: ["PENDING", "COMPLETED", "FAILED", "CANCELLED"] },
+      createdAt:     { bsonType: "date" },
+      processedAt:   { bsonType: "date" },
+      failureReason: { bsonType: "string" }
+    },
+    anyOf: [
+      { properties: { status: { enum: ["PENDING", "COMPLETED", "CANCELLED"] } } },
+      { required: ["failureReason"] }
     ]
   }
 };
@@ -119,7 +146,9 @@ const indexes = [
   ["audit_log",    { transactionIds: 1 },                      { name: "transactionIds" }],       // trace a history record
   ["audit_log",    { accountId: 1, _id: -1 },                  { name: "account_events" }],
   ["audit_log",    { relatedAccountId: 1, _id: -1 },           { name: "related_account_events" }],
-  ["audit_log",    { userId: 1, _id: -1 },                     { name: "user_events" }]
+  ["audit_log",    { userId: 1, _id: -1 },                     { name: "user_events" }],
+  ["scheduled_transfers", { status: 1, scheduledFor: 1 },      { name: "due" }],              // what's due now
+  ["scheduled_transfers", { ownerUserId: 1, _id: -1 },         { name: "owner_newest" }]
 ];
 for (const [collection, keys, options] of indexes) {
   try {

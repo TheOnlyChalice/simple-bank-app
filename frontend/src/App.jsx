@@ -17,6 +17,7 @@ const OpenAccountPage = lazy(() => import('./pages/OpenAccountPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const TransactionsPage = lazy(() => import('./pages/TransactionsPage'));
 const TransferPage = lazy(() => import('./pages/TransferPage'));
+const ScheduledTransfersPage = lazy(() => import('./pages/ScheduledTransfersPage'));
 const WithdrawPage = lazy(() => import('./pages/WithdrawPage'));
 const AdminAccountsPage = lazy(() => import('./pages/admin/AdminAccountsPage'));
 const AdminAuditPage = lazy(() => import('./pages/admin/AdminAuditPage'));
@@ -37,6 +38,7 @@ export default function App() {
           <Route element={<RequireAuth />}>
             <Route path="profile" element={<ProfilePage />} />
             <Route path="transfer" element={<TransferPage />} />
+            <Route path="transfers/scheduled" element={<ScheduledTransfersPage />} />
             <Route path="accounts/new" element={<OpenAccountPage />} />
             <Route path="accounts/:accountId" element={<AccountDetailsPage />} />
             <Route path="accounts/:accountId/deposit" element={<DepositPage />} />

@@ -31,9 +31,27 @@ export const accounts = {
       method: 'POST',
       body: { fromAccountId: Number(fromAccountId), toAccountId: Number(toAccountId), amount: toAmount(amount) },
     }),
+  freeze: (accountId) => apiFetch(`/api/accounts/${accountId}/freeze`, { method: 'POST' }),
+  unfreeze: (accountId) => apiFetch(`/api/accounts/${accountId}/unfreeze`, { method: 'POST' }),
   search: (filters) => apiFetch('/api/accounts', { query: filters }), // staff only
   premium: (threshold, page = 0, size = 20) =>
     apiFetch('/api/accounts/premium', { query: { threshold, page, size } }), // staff only
+};
+
+/** Transfers set to run at a future date and time. scheduledFor is sent as a UTC timestamp. */
+export const scheduledTransfers = {
+  create: (fromAccountId, toAccountId, amount, scheduledFor) =>
+    apiFetch('/api/transfers/scheduled', {
+      method: 'POST',
+      body: {
+        fromAccountId: Number(fromAccountId),
+        toAccountId: toAccountId === '' ? null : Number(toAccountId),
+        amount: toAmount(amount),
+        scheduledFor,
+      },
+    }),
+  list: (filters) => apiFetch('/api/transfers/scheduled', { query: filters }),
+  cancel: (id) => apiFetch(`/api/transfers/scheduled/${id}`, { method: 'DELETE' }),
 };
 
 export const audit = {

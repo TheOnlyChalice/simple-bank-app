@@ -95,6 +95,25 @@ public class AccountController {
         return ResponseEntity.noContent().build();
     }
 
+    // ----- Freeze -----
+
+    /**
+     * Freezes the account: no deposits, withdrawals, or transfers in or out until it's unfrozen.
+     * Customers can freeze their own accounts; staff can freeze any account.
+     */
+    @PostMapping("/{id}/freeze")
+    public AccountResponse freeze(@PathVariable Long id) {
+        accessGuard.requireAccountOwnerOrAdmin(id);
+        return accountService.freezeAccount(id, accessGuard.currentUser().role());
+    }
+
+    /** A customer can lift their own freeze; a freeze made by the bank can only be lifted by staff. */
+    @PostMapping("/{id}/unfreeze")
+    public AccountResponse unfreeze(@PathVariable Long id) {
+        accessGuard.requireAccountOwnerOrAdmin(id);
+        return accountService.unfreezeAccount(id, accessGuard.currentUser().role());
+    }
+
     // ----- Money -----
 
     @PostMapping("/{id}/deposit")

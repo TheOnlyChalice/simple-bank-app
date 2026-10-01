@@ -4,6 +4,7 @@ import com.simplebank.dto.AccountResponse;
 import com.simplebank.dto.PageResponse;
 import com.simplebank.dto.TransactionResponse;
 import com.simplebank.dto.TransferResponse;
+import com.simplebank.exception.AccountFrozenException;
 import com.simplebank.exception.InsufficientFundsException;
 import com.simplebank.exception.InvalidAmountException;
 import com.simplebank.exception.InvalidRequestException;
@@ -12,6 +13,7 @@ import com.simplebank.exception.ResourceNotFoundException;
 import com.simplebank.model.Account;
 import com.simplebank.model.AccountType;
 import com.simplebank.model.AuditAction;
+import com.simplebank.model.Role;
 import com.simplebank.model.Transaction;
 import com.simplebank.model.TransactionType;
 import com.simplebank.model.User;
@@ -37,7 +39,8 @@ import java.util.stream.Collectors;
  *   2. Deposit (and withdraw) amounts must be positive
  *   3. Every deposit/withdrawal is recorded as a transaction
  * Plus: the balance can't be edited directly, only empty accounts can be deleted,
- * and transfers move money between two accounts atomically.
+ * transfers move money between two accounts atomically, and no money moves into or
+ * out of a frozen account.
  *
  * Every method that changes an account runs in a MongoDB transaction (transactions.run).
  * If two requests change the same account at once, MongoDB aborts one with a write
@@ -148,12 +151,63 @@ public class AccountService {
         }));
     }
 
+    // ----- Freeze -----
+
+    /**
+     * Freezing stops all money movement (deposits, withdrawals, and transfers in or out)
+     * until the account is unfrozen. 'by' records who froze it: the customer or the bank.
+     */
+    public AccountResponse freezeAccount(Long accountId, Role by) {
+        AuditDetails audit = AuditDetails.forAccount(accountId);
+        return auditService.recordFailures(AuditAction.ACCOUNT_FROZEN, audit, () -> transactions.run(() -> {
+            Account account = findAccount(accountId);
+            if (account.isFrozen()) {
+                throw new OperationNotAllowedException("Account " + accountId + " is already frozen.");
+            }
+            account.freeze(by);
+            accountRepository.save(account);
+            auditService.recordSuccess(AuditAction.ACCOUNT_FROZEN, audit
+                    .withUserId(account.getUserId())
+                    .withDetails("frozen by " + by), List.of());
+            return AccountResponse.from(account, findUser(account.getUserId()));
+        }));
+    }
+
+    /**
+     * A customer can undo a freeze they made themselves. A freeze made by the bank (for
+     * example, for suspected fraud) can only be lifted by bank staff, so someone who has
+     * stolen the customer's password can't simply unfreeze the account.
+     */
+    public AccountResponse unfreezeAccount(Long accountId, Role by) {
+        AuditDetails audit = AuditDetails.forAccount(accountId);
+        return auditService.recordFailures(AuditAction.ACCOUNT_UNFROZEN, audit, () -> transactions.run(() -> {
+            Account account = findAccount(accountId);
+            if (!account.isFrozen()) {
+                throw new OperationNotAllowedException("Account " + accountId + " is not frozen.");
+            }
+            if (account.getFrozenBy() == Role.ADMIN && by != Role.ADMIN) {
+                throw new AccountFrozenException("Account " + accountId
+                        + " was frozen by the bank. Contact the bank to have it unfrozen.");
+            }
+            Role frozenBy = account.getFrozenBy();
+            account.unfreeze();
+            accountRepository.save(account);
+            auditService.recordSuccess(AuditAction.ACCOUNT_UNFROZEN, audit
+                    .withUserId(account.getUserId())
+                    .withDetails("unfrozen by " + by + " (was frozen by " + frozenBy + ")"), List.of());
+            return AccountResponse.from(account, findUser(account.getUserId()));
+        }));
+    }
+
+    // ----- Money -----
+
     public AccountResponse deposit(Long accountId, BigDecimal amount) {
         AuditDetails audit = AuditDetails.forAccount(accountId).withAmount(amount);
         return auditService.recordFailures(AuditAction.DEPOSIT, audit, () -> {
             BigDecimal validAmount = validateAmount(amount);
             return transactions.run(() -> {
                 Account account = findAccount(accountId);
+                requireNotFrozen(account);
                 BigDecimal oldBalance = account.getBalance();
 
                 BigDecimal newBalance = oldBalance.add(validAmount);
@@ -180,6 +234,7 @@ public class AccountService {
             BigDecimal validAmount = validateAmount(amount);
             return transactions.run(() -> {
                 Account account = findAccount(accountId);
+                requireNotFrozen(account);
                 BigDecimal oldBalance = account.getBalance();
 
                 if (oldBalance.compareTo(validAmount) < 0) {
@@ -210,48 +265,67 @@ public class AccountService {
     public TransferResponse transfer(Long fromAccountId, Long toAccountId, BigDecimal amount) {
         AuditDetails audit = AuditDetails.forTransfer(fromAccountId, toAccountId, amount);
         return auditService.recordFailures(AuditAction.TRANSFER, audit, () -> {
-            if (fromAccountId.equals(toAccountId)) {
-                throw new InvalidRequestException("Cannot transfer to the same account");
-            }
-            BigDecimal validAmount = validateAmount(amount);
-
-            return transactions.run(() -> {
-                Account from = findAccount(fromAccountId);
-                Account to = findAccount(toAccountId);
-                BigDecimal fromOldBalance = from.getBalance();
-                BigDecimal toOldBalance = to.getBalance();
-
-                if (fromOldBalance.compareTo(validAmount) < 0) {
-                    throw new InsufficientFundsException(fromOldBalance, validAmount);
-                }
-                BigDecimal newToBalance = toOldBalance.add(validAmount);
-                if (newToBalance.compareTo(MAX_BALANCE) > 0) {
-                    throw new InvalidAmountException("Transfer would exceed the maximum balance of "
-                            + MAX_BALANCE + " in account " + toAccountId);
-                }
-
-                from.setBalance(fromOldBalance.subtract(validAmount));
-                to.setBalance(newToBalance);
-                accountRepository.save(from);
-                accountRepository.save(to);
-                Transaction out = transactionRepository.save(
-                        new Transaction(fromAccountId, TransactionType.TRANSFER_OUT, validAmount, toAccountId));
-                Transaction in = transactionRepository.save(
-                        new Transaction(toAccountId, TransactionType.TRANSFER_IN, validAmount, fromAccountId));
-
-                auditService.recordSuccess(AuditAction.TRANSFER, audit
-                        .withUserId(from.getUserId())
-                        .withAmount(validAmount)
-                        .withDetails("from balance " + fromOldBalance + " -> " + from.getBalance()
-                                + "; to balance " + toOldBalance + " -> " + to.getBalance()),
-                        List.of(out.getTxnId(), in.getTxnId()));
-
-                return new TransferResponse(
-                        AccountResponse.from(from, findUser(from.getUserId())),
-                        AccountResponse.from(to, findUser(to.getUserId())),
-                        validAmount);
-            });
+            checkTransferRequest(fromAccountId, toAccountId, amount);
+            return transactions.run(() -> moveMoney(fromAccountId, toAccountId, amount, audit, null));
         });
+    }
+
+    /** The checks that don't need the database: different accounts, and a valid amount. */
+    void checkTransferRequest(Long fromAccountId, Long toAccountId, BigDecimal amount) {
+        if (fromAccountId.equals(toAccountId)) {
+            throw new InvalidRequestException("Cannot transfer to the same account");
+        }
+        validateAmount(amount);
+    }
+
+    /**
+     * The transfer itself. Must be called INSIDE a transaction (transactions.run): it is
+     * shared by instant transfers and by ScheduledTransferService, which runs it in the same
+     * transaction that marks the scheduled transfer as completed. 'note' is added to the
+     * audit details, e.g. "scheduled transfer #12".
+     */
+    TransferResponse moveMoney(Long fromAccountId, Long toAccountId, BigDecimal amount,
+                               AuditDetails audit, String note) {
+        checkTransferRequest(fromAccountId, toAccountId, amount);
+        BigDecimal validAmount = validateAmount(amount);
+
+        Account from = findAccount(fromAccountId);
+        Account to = findAccount(toAccountId);
+        requireNotFrozen(from);
+        requireNotFrozen(to);
+        BigDecimal fromOldBalance = from.getBalance();
+        BigDecimal toOldBalance = to.getBalance();
+
+        if (fromOldBalance.compareTo(validAmount) < 0) {
+            throw new InsufficientFundsException(fromOldBalance, validAmount);
+        }
+        BigDecimal newToBalance = toOldBalance.add(validAmount);
+        if (newToBalance.compareTo(MAX_BALANCE) > 0) {
+            throw new InvalidAmountException("Transfer would exceed the maximum balance of "
+                    + MAX_BALANCE + " in account " + toAccountId);
+        }
+
+        from.setBalance(fromOldBalance.subtract(validAmount));
+        to.setBalance(newToBalance);
+        accountRepository.save(from);
+        accountRepository.save(to);
+        Transaction out = transactionRepository.save(
+                new Transaction(fromAccountId, TransactionType.TRANSFER_OUT, validAmount, toAccountId));
+        Transaction in = transactionRepository.save(
+                new Transaction(toAccountId, TransactionType.TRANSFER_IN, validAmount, fromAccountId));
+
+        String details = "from balance " + fromOldBalance + " -> " + from.getBalance()
+                + "; to balance " + toOldBalance + " -> " + to.getBalance()
+                + (note == null ? "" : "; " + note);
+        auditService.recordSuccess(AuditAction.TRANSFER, audit
+                .withUserId(from.getUserId())
+                .withAmount(validAmount)
+                .withDetails(details), List.of(out.getTxnId(), in.getTxnId()));
+
+        return new TransferResponse(
+                AccountResponse.from(from, findUser(from.getUserId())),
+                AccountResponse.from(to, findUser(to.getUserId())),
+                validAmount);
     }
 
     // ----- Delete -----
@@ -264,6 +338,9 @@ public class AccountService {
         AuditDetails audit = AuditDetails.forAccount(accountId);
         auditService.recordFailures(AuditAction.ACCOUNT_DELETED, audit, () -> transactions.run(() -> {
             Account account = findAccount(accountId);
+            if (account.isFrozen()) {
+                throw new AccountFrozenException("Account " + accountId + " is frozen. Unfreeze it before closing it.");
+            }
             if (account.getBalance().compareTo(BigDecimal.ZERO) != 0) {
                 throw new OperationNotAllowedException("Account " + accountId + " has a balance of "
                         + account.getBalance() + ". Withdraw the full balance before deleting it.");
@@ -302,7 +379,13 @@ public class AccountService {
         return amount.setScale(2);
     }
 
-    private Account findAccount(Long accountId) {
+    private void requireNotFrozen(Account account) {
+        if (account.isFrozen()) {
+            throw new AccountFrozenException(account.getAccountId());
+        }
+    }
+
+    Account findAccount(Long accountId) {
         return accountRepository.findById(accountId)
                 .orElseThrow(() -> new ResourceNotFoundException("Account", accountId));
     }
