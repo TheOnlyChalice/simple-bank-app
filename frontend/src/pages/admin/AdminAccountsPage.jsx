@@ -5,6 +5,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import Alert from '../../components/Alert';
 import FormField from '../../components/FormField';
 import Pagination from '../../components/Pagination';
+import Spinner from '../../components/Spinner';
 import { formatAccountType, formatDate, formatMoney, localeFor } from '../../components/format';
 
 const EMPTY_FILTERS = { minBalance: '', maxBalance: '', accountType: '' };
@@ -14,7 +15,9 @@ const PAGE_SIZE = 20;
 export default function AdminAccountsPage() {
   const { t, language } = useLanguage();
   const [premium, setPremium] = useState(false);
+  const [draft, setDraft] = useState(EMPTY_FILTERS);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [thresholdDraft, setThresholdDraft] = useState('1000');
   const [threshold, setThreshold] = useState('1000');
   const [page, setPage] = useState(0);
   const [pageData, setPageData] = useState(null);
@@ -33,6 +36,8 @@ export default function AdminAccountsPage() {
 
   function handleSearch(event) {
     event.preventDefault();
+    setFilters(draft);
+    setThreshold(thresholdDraft);
     setPage(0);
   }
 
@@ -57,19 +62,19 @@ export default function AdminAccountsPage() {
 
       {!premium && (
         <form className="panel filters" onSubmit={handleSearch}>
-          <FormField label={t('adminAccounts.minBalance')} type="number" id="minBalance" value={filters.minBalance}
-            onChange={(e) => setFilters((c) => ({ ...c, minBalance: e.target.value }))} />
-          <FormField label={t('adminAccounts.maxBalance')} type="number" id="maxBalance" value={filters.maxBalance}
-            onChange={(e) => setFilters((c) => ({ ...c, maxBalance: e.target.value }))} />
-          <FormField label={t('adminAccounts.accountType')} as="select" id="accountType" value={filters.accountType}
-            onChange={(e) => setFilters((c) => ({ ...c, accountType: e.target.value }))}>
+          <FormField label={t('adminAccounts.minBalance')} type="number" id="minBalance" value={draft.minBalance}
+            onChange={(e) => setDraft((c) => ({ ...c, minBalance: e.target.value }))} />
+          <FormField label={t('adminAccounts.maxBalance')} type="number" id="maxBalance" value={draft.maxBalance}
+            onChange={(e) => setDraft((c) => ({ ...c, maxBalance: e.target.value }))} />
+          <FormField label={t('adminAccounts.accountType')} as="select" id="accountType" value={draft.accountType}
+            onChange={(e) => setDraft((c) => ({ ...c, accountType: e.target.value }))}>
             <option value="">{t('adminAccounts.any')}</option>
             <option value="SAVINGS">{t('adminAccounts.savings')}</option>
             <option value="CHECKING">{t('adminAccounts.checking')}</option>
           </FormField>
           <div className="button-row">
             <button type="submit" className="button">{t('adminAccounts.search')}</button>
-            <button type="button" className="button secondary" onClick={() => { setFilters(EMPTY_FILTERS); setPage(0); }}>
+            <button type="button" className="button secondary" onClick={() => { setDraft(EMPTY_FILTERS); setFilters(EMPTY_FILTERS); setPage(0); }}>
               {t('adminAccounts.reset')}
             </button>
           </div>
@@ -78,15 +83,15 @@ export default function AdminAccountsPage() {
 
       {premium && (
         <form className="panel filters" onSubmit={handleSearch}>
-          <FormField label={t('adminAccounts.threshold')} type="number" id="threshold" value={threshold}
-            onChange={(e) => setThreshold(e.target.value)} />
+          <FormField label={t('adminAccounts.threshold')} type="number" id="threshold" value={thresholdDraft}
+            onChange={(e) => setThresholdDraft(e.target.value)} />
           <button type="submit" className="button">{t('adminAccounts.search')}</button>
         </form>
       )}
 
       <Alert>{error}</Alert>
 
-      {pageData === null && !error && <p className="muted">{t('adminAccounts.loading')}</p>}
+      {pageData === null && !error && <Spinner label={t('adminAccounts.loading')} />}
       {pageData?.content.length === 0 && <p className="muted">{t('adminAccounts.empty')}</p>}
 
       {pageData?.content.length > 0 && (

@@ -2,6 +2,7 @@ import { Link, Navigate, useLocation } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import Alert from '../components/Alert';
+import BrandMark from '../components/BrandMark';
 import FormField from '../components/FormField';
 import { useForm } from '../components/useForm';
 
@@ -20,21 +21,32 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="narrow">
-      <h1>{t('login.title')}</h1>
-      {sessionExpired && <Alert kind="info">{t('login.sessionExpired')}</Alert>}
-      <Alert>{form.message}</Alert>
+    <div className="auth-layout">
+      <div className="narrow">
+        <h1>{t('login.title')}</h1>
+        {sessionExpired && <Alert kind="info">{t('login.sessionExpired')}</Alert>}
+        <Alert>{form.message}</Alert>
 
-      <form className="panel stack" onSubmit={handleSubmit} noValidate>
-        <FormField label={t('login.email')} type="email" autoComplete="email" error={form.errors.email} {...form.bind('email')} />
-        <FormField label={t('login.password')} type="password" autoComplete="current-password"
-          error={form.errors.password} {...form.bind('password')} />
-        <button type="submit" className="button" disabled={form.submitting}>
-          {form.submitting ? t('login.submitting') : t('login.submit')}
-        </button>
-      </form>
+        <form className="panel stack" onSubmit={handleSubmit} noValidate>
+          <FormField label={t('login.email')} type="email" autoComplete="email" error={form.errors.email} {...form.bind('email')} />
+          <FormField label={t('login.password')} type="password" autoComplete="current-password"
+            error={form.errors.password} {...form.bind('password')} />
+          <button type="submit" className="button" disabled={form.submitting}>
+            {form.submitting ? t('login.submitting') : t('login.submit')}
+          </button>
+        </form>
 
-      <p className="muted">{t('login.newHere')} <Link to="/create-account">{t('login.createAccount')}</Link></p>
+        <p className="muted">{t('login.newHere')} <Link to="/create-account">{t('login.createAccount')}</Link></p>
+      </div>
+
+      <div className="panel auth-aside">
+        <BrandMark showWordmark />
+        <ul className="auth-points">
+          <li>{t('login.aside.point1')}</li>
+          <li>{t('login.aside.point2')}</li>
+          <li>{t('login.aside.point3')}</li>
+        </ul>
+      </div>
     </div>
   );
 }

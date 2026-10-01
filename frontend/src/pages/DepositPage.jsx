@@ -1,6 +1,7 @@
 import { Link, useNavigate, useParams } from 'react-router';
 import { accounts } from '../api/bank';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useToast } from '../toast/ToastContext';
 import Alert from '../components/Alert';
 import FormField from '../components/FormField';
 import { formatMoney } from '../components/format';
@@ -10,6 +11,7 @@ import { useForm } from '../components/useForm';
 export default function DepositPage() {
   const { accountId } = useParams();
   const { t } = useLanguage();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const form = useForm({ amount: '' });
 
@@ -17,9 +19,8 @@ export default function DepositPage() {
     event.preventDefault();
     const account = await form.submit((values) => accounts.deposit(accountId, values.amount));
     if (account) {
-      navigate(`/accounts/${accountId}`, {
-        state: { notice: t('deposit.notice', { amount: formatMoney(form.values.amount), balance: formatMoney(account.balance) }) },
-      });
+      showToast(t('deposit.notice', { amount: formatMoney(form.values.amount), balance: formatMoney(account.balance) }));
+      navigate(`/accounts/${accountId}`);
     }
   }
 

@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import Alert from '../../components/Alert';
 import FormField from '../../components/FormField';
 import Pagination from '../../components/Pagination';
+import Spinner from '../../components/Spinner';
 import { formatDateTime, formatMoney, localeFor } from '../../components/format';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { audit } from '../../api/bank';
@@ -26,6 +27,7 @@ function outcomeBadgeClass(outcome) {
 /** Staff-only: the append-only audit trail, searchable by who, what, and when. */
 export default function AdminAuditPage() {
   const { t, language } = useLanguage();
+  const [draft, setDraft] = useState(EMPTY_FILTERS);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [page, setPage] = useState(0);
   const [pageData, setPageData] = useState(null);
@@ -47,11 +49,12 @@ export default function AdminAuditPage() {
   }, [filters, page]);
 
   function set(name) {
-    return (event) => setFilters((current) => ({ ...current, [name]: event.target.value }));
+    return (event) => setDraft((current) => ({ ...current, [name]: event.target.value }));
   }
 
   function handleSearch(event) {
     event.preventDefault();
+    setFilters(draft);
     setPage(0);
   }
 
@@ -60,21 +63,21 @@ export default function AdminAuditPage() {
       <h1>{t('adminAudit.title')}</h1>
 
       <form className="panel filters" onSubmit={handleSearch}>
-        <FormField label={t('adminAudit.accountId')} type="number" id="accountId" value={filters.accountId} onChange={set('accountId')} />
-        <FormField label={t('adminAudit.userId')} type="number" id="userId" value={filters.userId} onChange={set('userId')} />
-        <FormField label={t('adminAudit.action')} as="select" id="action" value={filters.action} onChange={set('action')}>
+        <FormField label={t('adminAudit.accountId')} type="number" id="accountId" value={draft.accountId} onChange={set('accountId')} />
+        <FormField label={t('adminAudit.userId')} type="number" id="userId" value={draft.userId} onChange={set('userId')} />
+        <FormField label={t('adminAudit.action')} as="select" id="action" value={draft.action} onChange={set('action')}>
           <option value="">{t('adminAudit.any')}</option>
           {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
         </FormField>
-        <FormField label={t('adminAudit.outcome')} as="select" id="outcome" value={filters.outcome} onChange={set('outcome')}>
+        <FormField label={t('adminAudit.outcome')} as="select" id="outcome" value={draft.outcome} onChange={set('outcome')}>
           <option value="">{t('adminAudit.any')}</option>
           {OUTCOMES.map((o) => <option key={o} value={o}>{o}</option>)}
         </FormField>
-        <FormField label={t('adminAudit.from')} type="datetime-local" id="from" value={filters.from} onChange={set('from')} />
-        <FormField label={t('adminAudit.to')} type="datetime-local" id="to" value={filters.to} onChange={set('to')} />
+        <FormField label={t('adminAudit.from')} type="datetime-local" id="from" value={draft.from} onChange={set('from')} />
+        <FormField label={t('adminAudit.to')} type="datetime-local" id="to" value={draft.to} onChange={set('to')} />
         <div className="button-row">
           <button type="submit" className="button">{t('adminAudit.search')}</button>
-          <button type="button" className="button secondary" onClick={() => { setFilters(EMPTY_FILTERS); setPage(0); }}>
+          <button type="button" className="button secondary" onClick={() => { setDraft(EMPTY_FILTERS); setFilters(EMPTY_FILTERS); setPage(0); }}>
             {t('adminAudit.reset')}
           </button>
         </div>
@@ -82,7 +85,7 @@ export default function AdminAuditPage() {
 
       <Alert>{error}</Alert>
 
-      {pageData === null && !error && <p className="muted">{t('adminAudit.loading')}</p>}
+      {pageData === null && !error && <Spinner label={t('adminAudit.loading')} />}
       {pageData?.content.length === 0 && <p className="muted">{t('adminAudit.empty')}</p>}
 
       {pageData?.content.length > 0 && (

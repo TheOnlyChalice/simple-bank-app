@@ -25,15 +25,15 @@ export const translations = {
     'common.savings': 'Savings',
     'common.checking': 'Checking',
     'form.checkFields': 'Check the highlighted fields.',
+    'common.confirm': 'Yes, continue',
+    'common.cancel': 'Cancel',
+    'app.loading': 'Loading…',
 
     // Home page
     'home.hero.title': 'Every deposit, withdrawal, and transfer, accounted for.',
     'home.hero.body': 'Open a savings or checking account in a minute. Move money between accounts and see a full history of everything that happened.',
     'home.hero.createAccount': 'Create account',
     'home.hero.viewAccount': 'View account',
-    'home.hero.sampleAccount': 'Savings account #1024',
-    'home.hero.sampleDeposit': 'Deposit',
-    'home.hero.sampleTransfer': 'Transfer to #1031',
     'home.hello': 'Hello, {name}',
     'home.openAccount': 'Open an account',
     'home.loading': 'Loading your accounts…',
@@ -55,6 +55,9 @@ export const translations = {
     'login.submit': 'Log in',
     'login.newHere': 'New to Simple Bank?',
     'login.createAccount': 'Create an account',
+    'login.aside.point1': 'Bank-grade security on every login',
+    'login.aside.point2': 'Real-time balances and instant transfers',
+    'login.aside.point3': 'Every transaction tracked, always',
 
     // Create account page
     'createAccount.title': 'Create account',
@@ -284,15 +287,15 @@ export const translations = {
     'common.savings': 'Ahorros',
     'common.checking': 'Corriente',
     'form.checkFields': 'Revisa los campos resaltados.',
+    'common.confirm': 'Sí, continuar',
+    'common.cancel': 'Cancelar',
+    'app.loading': 'Cargando…',
 
     // Home page
     'home.hero.title': 'Cada depósito, retiro y transferencia, registrado.',
     'home.hero.body': 'Abre una cuenta de ahorros o corriente en un minuto. Mueve dinero entre cuentas y consulta el historial completo de todo lo que ha pasado.',
     'home.hero.createAccount': 'Crear cuenta',
     'home.hero.viewAccount': 'Ver cuenta',
-    'home.hero.sampleAccount': 'Cuenta de ahorros #1024',
-    'home.hero.sampleDeposit': 'Depósito',
-    'home.hero.sampleTransfer': 'Transferencia a #1031',
     'home.hello': 'Hola, {name}',
     'home.openAccount': 'Abrir una cuenta',
     'home.loading': 'Cargando tus cuentas…',
@@ -314,6 +317,9 @@ export const translations = {
     'login.submit': 'Iniciar sesión',
     'login.newHere': '¿Nuevo en Simple Bank?',
     'login.createAccount': 'Crea una cuenta',
+    'login.aside.point1': 'Seguridad de nivel bancario en cada inicio de sesión',
+    'login.aside.point2': 'Saldos en tiempo real y transferencias instantáneas',
+    'login.aside.point3': 'Cada transacción registrada, siempre',
 
     // Create account page
     'createAccount.title': 'Crear cuenta',

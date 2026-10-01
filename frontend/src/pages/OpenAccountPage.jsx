@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useToast } from '../toast/ToastContext';
 import { accounts } from '../api/bank';
 import Alert from '../components/Alert';
 import FormField from '../components/FormField';
@@ -10,6 +11,7 @@ import { useForm } from '../components/useForm';
 export default function OpenAccountPage() {
   const { user } = useAuth();
   const { t } = useLanguage();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const form = useForm({ accountType: 'SAVINGS' });
 
@@ -17,7 +19,8 @@ export default function OpenAccountPage() {
     event.preventDefault();
     const account = await form.submit((values) => accounts.create(user.userId, values.accountType));
     if (account) {
-      navigate(`/accounts/${account.accountId}`, { state: { notice: t('openAccount.notice') } });
+      showToast(t('openAccount.notice'));
+      navigate(`/accounts/${account.accountId}`);
     }
   }
 

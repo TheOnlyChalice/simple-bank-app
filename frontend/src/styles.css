@@ -205,7 +205,26 @@ legend { font-weight: 600; padding: 0 0.25rem; }
 .hero { display: grid; grid-template-columns: 1.15fr 1fr; gap: 3rem; align-items: center; padding: 2.5rem 0; }
 .hero h1 { font-size: clamp(2rem, 4.5vw, 2.875rem); letter-spacing: -0.02em; max-width: 18ch; }
 .hero-text p { font-size: 1.125rem; color: var(--muted); max-width: 34rem; margin-bottom: 1.5rem; }
-.statement .balance { margin-bottom: 1.25rem; }
+.hero-logo { display: flex; align-items: center; justify-content: center; padding: 2.5rem; }
+
+/* ----- Brand mark (home hero, login aside) ----- */
+
+.brand-mark { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; }
+.brand-mark svg { filter: drop-shadow(0 10px 20px rgba(10, 69, 76, 0.25)); }
+.brand-wordmark { margin: 0; font-size: 1.25rem; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); }
+
+/* ----- Login page ----- */
+
+.auth-layout { display: grid; grid-template-columns: minmax(280px, 420px) 1fr; gap: 3rem; align-items: center; padding: 1.5rem 0 2.5rem; }
+.auth-aside { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1.5rem; padding: 2.5rem; }
+.auth-points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; text-align: left; }
+.auth-points li { position: relative; padding-left: 1.5rem; color: var(--muted); }
+.auth-points li::before { content: '✓'; position: absolute; left: 0; color: var(--credit); font-weight: 700; }
+
+@media (max-width: 860px) {
+  .auth-layout { grid-template-columns: 1fr; }
+  .auth-aside { display: none; }
+}
 
 @media (max-width: 720px) {
   .hero { grid-template-columns: 1fr; gap: 2rem; padding-top: 1rem; }
@@ -220,4 +239,54 @@ legend { font-weight: 600; padding: 0 0.25rem; }
   .nav a { padding: 0.625rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
 
   .account-summary { flex-direction: column; align-items: flex-start; }
+}
+
+/* ----- Toasts ----- */
+
+.toast-stack {
+  position: fixed; top: 1rem; right: 1rem; z-index: 100;
+  display: flex; flex-direction: column; gap: 0.625rem; max-width: min(24rem, calc(100vw - 2rem));
+}
+.toast {
+  display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem 1rem;
+  background: var(--surface); color: var(--ink); border-left: 4px solid var(--harbor);
+  border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  animation: toast-in 0.18s ease-out;
+}
+.toast.success { border-color: var(--credit); }
+.toast.error { border-color: var(--debit); }
+.toast span { flex: 1; }
+.toast-close {
+  background: none; border: 0; color: var(--muted); font-size: 1.125rem; line-height: 1; cursor: pointer; padding: 0;
+}
+.toast-close:hover { color: var(--ink); }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-0.5rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ----- Confirm dialog ----- */
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(15, 23, 27, 0.55); z-index: 110;
+  display: flex; align-items: center; justify-content: center; padding: 1.25rem;
+}
+.modal {
+  background: var(--surface); color: var(--ink); border-radius: var(--radius);
+  padding: 1.5rem; max-width: 26rem; width: 100%; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+}
+.modal p { margin: 0 0 1.25rem; }
+
+/* ----- Spinner ----- */
+
+.loading-row { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); }
+.spinner {
+  display: inline-block; width: 1em; height: 1em; border-radius: 50%;
+  border: 2px solid var(--rule); border-top-color: var(--harbor);
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 1.5s; }
+  .toast { animation: none; }
 }

@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useToast } from '../toast/ToastContext';
 import { accounts } from '../api/bank';
 import Alert from '../components/Alert';
 import FormField from '../components/FormField';
@@ -14,6 +15,7 @@ import { useForm } from '../components/useForm';
 export default function CreateAccountPage() {
   const { user, register } = useAuth();
   const { t } = useLanguage();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const inProgress = useRef(false); // stay on this page while the new account is being opened
   const form = useForm({
@@ -54,15 +56,11 @@ export default function CreateAccountPage() {
 
     try {
       const account = await accounts.create(session.user.userId, form.values.accountType);
-      navigate(`/accounts/${account.accountId}`, {
-        replace: true,
-        state: { notice: t('createAccount.welcomeNotice') },
-      });
+      showToast(t('createAccount.welcomeNotice'));
+      navigate(`/accounts/${account.accountId}`, { replace: true });
     } catch (error) {
-      navigate('/', {
-        replace: true,
-        state: { notice: t('createAccount.failedNotice', { message: error.message }) },
-      });
+      showToast(t('createAccount.failedNotice', { message: error.message }), 'error');
+      navigate('/', { replace: true });
     }
   }
 

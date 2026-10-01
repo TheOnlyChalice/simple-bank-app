@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useToast } from '../toast/ToastContext';
 import { accounts, users } from '../api/bank';
 import Alert from '../components/Alert';
 import FormField from '../components/FormField';
+import Spinner from '../components/Spinner';
 import { formatAccountType, formatMoney } from '../components/format';
 import { useForm } from '../components/useForm';
 
@@ -12,6 +14,7 @@ import { useForm } from '../components/useForm';
 export default function TransferPage() {
   const { user } = useAuth();
   const { t } = useLanguage();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [myAccounts, setMyAccounts] = useState(null);
@@ -39,9 +42,8 @@ export default function TransferPage() {
     const values = form.values;
     const result = await form.submit((v) => accounts.transfer(v.fromAccountId, v.toAccountId, v.amount));
     if (result) {
-      navigate(`/accounts/${values.fromAccountId}`, {
-        state: { notice: t('transfer.notice', { amount: formatMoney(result.amount), id: values.toAccountId }) },
-      });
+      showToast(t('transfer.notice', { amount: formatMoney(result.amount), id: values.toAccountId }));
+      navigate(`/accounts/${values.fromAccountId}`);
     }
   }
 
@@ -53,7 +55,7 @@ export default function TransferPage() {
       <Alert>{loadError}</Alert>
       <Alert>{form.message}</Alert>
 
-      {myAccounts === null && !loadError && <p className="muted">{t('transfer.loading')}</p>}
+      {myAccounts === null && !loadError && <Spinner label={t('transfer.loading')} />}
 
       {myAccounts?.length === 0 && (
         <div className="panel empty">

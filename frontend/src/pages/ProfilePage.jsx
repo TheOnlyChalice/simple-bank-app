@@ -2,17 +2,20 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useToast } from '../toast/ToastContext';
 import { users } from '../api/bank';
 import Alert from '../components/Alert';
 import FormField from '../components/FormField';
+import { useConfirm } from '../components/useConfirm';
 import { useForm } from '../components/useForm';
 
 /** View and edit your own name, email, and address; or close your profile. */
 export default function ProfilePage() {
   const { user, updateUser, logout } = useAuth();
   const { t } = useLanguage();
+  const { showToast } = useToast();
+  const { confirm, dialog } = useConfirm();
   const navigate = useNavigate();
-  const [saved, setSaved] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const form = useForm({
@@ -26,7 +29,6 @@ export default function ProfilePage() {
 
   async function handleSubmit(event) {
     event.preventDefault();
-    setSaved(false);
     const updated = await form.submit((values) =>
       users.update(user.userId, {
         name: values.name,
@@ -41,18 +43,19 @@ export default function ProfilePage() {
     );
     if (updated) {
       updateUser(updated);
-      setSaved(true);
+      showToast(t('profile.saved'));
     }
   }
 
   async function handleDelete() {
-    if (!window.confirm(t('profile.closeConfirm'))) return;
+    if (!(await confirm(t('profile.closeConfirm')))) return;
     setDeleting(true);
     setDeleteError('');
     try {
       await users.remove(user.userId);
       logout();
-      navigate('/', { state: { notice: t('profile.closedNotice') } });
+      showToast(t('profile.closedNotice'));
+      navigate('/');
     } catch (error) {
       setDeleteError(error.message);
       setDeleting(false);
@@ -63,9 +66,9 @@ export default function ProfilePage() {
 
   return (
     <div className="narrow wide stack-lg">
+      {dialog}
       <h1>{t('profile.title')}</h1>
 
-      <Alert kind="success">{saved ? t('profile.saved') : ''}</Alert>
       <Alert>{form.message}</Alert>
 
       <form className="panel stack" onSubmit={handleSubmit} noValidate>

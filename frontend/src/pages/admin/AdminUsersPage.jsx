@@ -5,6 +5,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import Alert from '../../components/Alert';
 import FormField from '../../components/FormField';
 import Pagination from '../../components/Pagination';
+import Spinner from '../../components/Spinner';
 import { formatDate, localeFor } from '../../components/format';
 
 const EMPTY_FILTERS = { state: '', city: '', zip: '', minBalance: '', maxBalance: '', balanceMode: 'TOTAL' };
@@ -13,6 +14,7 @@ const PAGE_SIZE = 20;
 /** Staff-only: search and browse every customer. */
 export default function AdminUsersPage() {
   const { t, language } = useLanguage();
+  const [draft, setDraft] = useState(EMPTY_FILTERS);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [page, setPage] = useState(0);
   const [pageData, setPageData] = useState(null);
@@ -28,15 +30,17 @@ export default function AdminUsersPage() {
   }, [filters, page]);
 
   function handleFilterChange(name) {
-    return (event) => setFilters((current) => ({ ...current, [name]: event.target.value }));
+    return (event) => setDraft((current) => ({ ...current, [name]: event.target.value }));
   }
 
   function handleSearch(event) {
     event.preventDefault();
+    setFilters(draft);
     setPage(0);
   }
 
   function handleReset() {
+    setDraft(EMPTY_FILTERS);
     setFilters(EMPTY_FILTERS);
     setPage(0);
   }
@@ -46,14 +50,14 @@ export default function AdminUsersPage() {
       <h1>{t('adminUsers.title')}</h1>
 
       <form className="panel filters" onSubmit={handleSearch}>
-        <FormField label={t('adminUsers.state')} maxLength={2} id="state" value={filters.state} onChange={handleFilterChange('state')} />
-        <FormField label={t('adminUsers.city')} id="city" value={filters.city} onChange={handleFilterChange('city')} />
-        <FormField label={t('adminUsers.zip')} id="zip" value={filters.zip} onChange={handleFilterChange('zip')} />
-        <FormField label={t('adminUsers.minBalance')} type="number" id="minBalance" value={filters.minBalance}
+        <FormField label={t('adminUsers.state')} maxLength={2} id="state" value={draft.state} onChange={handleFilterChange('state')} />
+        <FormField label={t('adminUsers.city')} id="city" value={draft.city} onChange={handleFilterChange('city')} />
+        <FormField label={t('adminUsers.zip')} id="zip" value={draft.zip} onChange={handleFilterChange('zip')} />
+        <FormField label={t('adminUsers.minBalance')} type="number" id="minBalance" value={draft.minBalance}
           onChange={handleFilterChange('minBalance')} />
-        <FormField label={t('adminUsers.maxBalance')} type="number" id="maxBalance" value={filters.maxBalance}
+        <FormField label={t('adminUsers.maxBalance')} type="number" id="maxBalance" value={draft.maxBalance}
           onChange={handleFilterChange('maxBalance')} />
-        <FormField label={t('adminUsers.balanceMode')} as="select" id="balanceMode" value={filters.balanceMode}
+        <FormField label={t('adminUsers.balanceMode')} as="select" id="balanceMode" value={draft.balanceMode}
           onChange={handleFilterChange('balanceMode')}>
           <option value="TOTAL">{t('adminUsers.balanceMode.total')}</option>
           <option value="ANY_ACCOUNT">{t('adminUsers.balanceMode.any')}</option>
@@ -66,7 +70,7 @@ export default function AdminUsersPage() {
 
       <Alert>{error}</Alert>
 
-      {pageData === null && !error && <p className="muted">{t('adminUsers.loading')}</p>}
+      {pageData === null && !error && <Spinner label={t('adminUsers.loading')} />}
 
       {pageData?.content.length === 0 && <p className="muted">{t('adminUsers.empty')}</p>}
 

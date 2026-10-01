@@ -4,6 +4,7 @@ import { accounts } from '../api/bank';
 import { useLanguage } from '../i18n/LanguageContext';
 import Alert from '../components/Alert';
 import Pagination from '../components/Pagination';
+import Spinner from '../components/Spinner';
 import TransactionTable from '../components/TransactionTable';
 import { formatAccountType } from '../components/format';
 
@@ -53,7 +54,7 @@ export default function TransactionsPage() {
       </div>
       {account && <p className="muted">{formatAccountType(account.accountType, t)} #{account.accountId}</p>}
 
-      {pageData === null && <p className="muted">{t('transactions.loading')}</p>}
+      {pageData === null && <Spinner label={t('transactions.loading')} />}
       {pageData && (
         <>
           <TransactionTable transactions={pageData.content} />

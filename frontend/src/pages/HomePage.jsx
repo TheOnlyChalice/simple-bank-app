@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate, useLocation } from 'react-router';
+import { Link, Navigate } from 'react-router';
 import { useAuth } from '../auth/AuthContext';
 import { useLanguage } from '../i18n/LanguageContext';
 import { users } from '../api/bank';
 import Alert from '../components/Alert';
+import BrandMark from '../components/BrandMark';
+import Spinner from '../components/Spinner';
 import { formatAccountType, formatDate, formatMoney, localeFor, totalBalance } from '../components/format';
 
 /** Section 7.1: "Create Account" and "View Account" when logged out; your accounts when logged in. */
@@ -27,16 +29,8 @@ function Welcome() {
         </div>
       </div>
 
-      <div className="panel statement" aria-hidden="true">
-        <p className="muted">{t('home.hero.sampleAccount')}</p>
-        <p className="balance">$2,480.00</p>
-        <table className="ledger compact">
-          <tbody>
-            <tr><td>{t('home.hero.sampleDeposit')}</td><td className="num credit">+$1,500.00</td></tr>
-            <tr><td>{t('home.hero.sampleTransfer')}</td><td className="num debit">−$200.00</td></tr>
-            <tr><td>{t('home.hero.sampleDeposit')}</td><td className="num credit">+$1,180.00</td></tr>
-          </tbody>
-        </table>
+      <div className="panel hero-logo" aria-hidden="true">
+        <BrandMark size={200} />
       </div>
     </section>
   );
@@ -44,7 +38,6 @@ function Welcome() {
 
 function Dashboard({ user }) {
   const { t, language } = useLanguage();
-  const location = useLocation();
   const [myAccounts, setMyAccounts] = useState(null);
   const [error, setError] = useState('');
 
@@ -66,10 +59,9 @@ function Dashboard({ user }) {
         <Link to="/accounts/new" className="button">{t('home.openAccount')}</Link>
       </div>
 
-      <Alert kind="info">{location.state?.notice}</Alert>
       <Alert>{error}</Alert>
 
-      {myAccounts === null && !error && <p className="muted">{t('home.loading')}</p>}
+      {myAccounts === null && !error && <Spinner label={t('home.loading')} />}
 
       {myAccounts?.length === 0 && (
         <div className="panel empty">

@@ -2,13 +2,18 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { users } from '../../api/bank';
 import { useLanguage } from '../../i18n/LanguageContext';
+import { useToast } from '../../toast/ToastContext';
 import Alert from '../../components/Alert';
+import Spinner from '../../components/Spinner';
+import { useConfirm } from '../../components/useConfirm';
 import { formatAccountType, formatDate, formatMoney, localeFor, totalBalance } from '../../components/format';
 
 /** Staff-only: one customer's profile and accounts. */
 export default function AdminUserDetailsPage() {
   const { userId } = useParams();
   const { t, language } = useLanguage();
+  const { showToast } = useToast();
+  const { confirm, dialog } = useConfirm();
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [accountList, setAccountList] = useState(null);
@@ -28,11 +33,12 @@ export default function AdminUserDetailsPage() {
   }, [userId]);
 
   async function handleDelete() {
-    if (!window.confirm(t('adminUserDetails.closeConfirm', { name: user.name }))) return;
+    if (!(await confirm(t('adminUserDetails.closeConfirm', { name: user.name })))) return;
     setDeleting(true);
     try {
       await users.remove(userId);
-      navigate('/admin/users', { state: { notice: t('adminUserDetails.closedNotice', { name: user.name }) } });
+      showToast(t('adminUserDetails.closedNotice', { name: user.name }));
+      navigate('/admin/users');
     } catch (err) {
       setError(err.message);
       setDeleting(false);
@@ -47,10 +53,11 @@ export default function AdminUserDetailsPage() {
       </div>
     );
   }
-  if (!user) return <p className="muted">{t('adminUserDetails.loading')}</p>;
+  if (!user) return <Spinner label={t('adminUserDetails.loading')} />;
 
   return (
     <div className="stack-lg">
+      {dialog}
       <div className="page-header">
         <h1>{user.name}</h1>
         <Link to="/admin/users" className="button secondary">{t('adminUserDetails.backToCustomers')}</Link>

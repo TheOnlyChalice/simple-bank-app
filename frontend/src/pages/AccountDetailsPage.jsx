@@ -1,16 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { accounts } from '../api/bank';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useToast } from '../toast/ToastContext';
 import Alert from '../components/Alert';
+import Spinner from '../components/Spinner';
 import TransactionTable from '../components/TransactionTable';
+import { useConfirm } from '../components/useConfirm';
 import { formatDate, formatMoney, localeFor } from '../components/format';
 
 /** Section 7.3: account ID, user name, and balance, with Deposit, Withdraw, and View Transactions. */
 export default function AccountDetailsPage() {
   const { accountId } = useParams();
   const { t, language } = useLanguage();
-  const location = useLocation();
+  const { showToast } = useToast();
+  const { confirm, dialog } = useConfirm();
   const navigate = useNavigate();
   const [account, setAccount] = useState(null);
   const [recent, setRecent] = useState([]);
@@ -48,12 +52,13 @@ export default function AccountDetailsPage() {
   }
 
   async function handleClose() {
-    if (!window.confirm(t('account.closeConfirm'))) return;
+    if (!(await confirm(t('account.closeConfirm')))) return;
     setClosing(true);
     setSettingsMessage('');
     try {
       await accounts.remove(accountId);
-      navigate('/', { state: { notice: t('account.closedNotice') } });
+      showToast(t('account.closedNotice'));
+      navigate('/');
     } catch (err) {
       setSettingsMessage(err.message);
       setClosing(false);
@@ -68,14 +73,14 @@ export default function AccountDetailsPage() {
       </div>
     );
   }
-  if (!account) return <p className="muted">{t('account.loading')}</p>;
+  if (!account) return <Spinner label={t('account.loading')} />;
 
   const base = `/accounts/${account.accountId}`;
   const title = account.accountType === 'CHECKING' ? t('account.checkingAccount') : t('account.savingsAccount');
 
   return (
     <div className="stack-lg">
-      <Alert kind="success">{location.state?.notice}</Alert>
+      {dialog}
 
       <section className="panel account-summary">
         <div>
