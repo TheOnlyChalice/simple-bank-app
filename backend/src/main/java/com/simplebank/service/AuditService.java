@@ -127,7 +127,20 @@ public class AuditService {
                     + jwt.getClaimAsString("role") + ")";
         }
         HttpServletRequest request = currentHttpRequest();
-        return request != null ? "anonymous@" + request.getRemoteAddr() : "system";
+        return request != null ? "anonymous@" + callerAddress(request) : "system";
+    }
+
+    /**
+     * The caller's IP address. On AWS, requests arrive through CloudFront, which puts the
+     * real caller's address in the CloudFront-Viewer-Address header ("ip:port").
+     * Without that header (e.g. on your own computer), it's the direct connection's address.
+     */
+    private static String callerAddress(HttpServletRequest request) {
+        String viewer = request.getHeader("CloudFront-Viewer-Address");
+        if (viewer != null && viewer.lastIndexOf(':') > 0) {
+            return viewer.substring(0, viewer.lastIndexOf(':'));
+        }
+        return request.getRemoteAddr();
     }
 
     /** e.g. "POST /api/accounts/7/withdraw" */

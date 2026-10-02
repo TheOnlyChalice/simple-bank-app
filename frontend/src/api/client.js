@@ -1,7 +1,9 @@
 // One place for every request to the backend: adds the login token, sends JSON,
 // and turns the backend's error format into an ApiError with message and fieldErrors.
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
+// Development: the backend on port 8080. Production build: the same address as the website
+// (CloudFront sends /api/* to the backend). VITE_API_URL overrides either.
+const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8080' : '');
 
 export class ApiError extends Error {
   constructor(status, message, fieldErrors = {}) {
@@ -25,7 +27,7 @@ export function setUnauthorizedHandler(handler) {
 }
 
 export async function apiFetch(path, { method = 'GET', body, query } = {}) {
-  const url = new URL(API_URL + path);
+  const url = new URL(API_URL + path, window.location.origin); // a relative API_URL uses the site's own address
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined && value !== null && value !== '') {
